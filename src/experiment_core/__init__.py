@@ -29,6 +29,7 @@ from .renewal import (
     renewal_index,
 )
 from .session import Session
+from .sink import EventSink, InMemorySink, event_to_dict
 
 __version__ = "0.1.0a0"
 
@@ -57,5 +58,8 @@ __all__ = [
     "PhaseRecord",
     "PhaseResult",
     "renewal_index",
+    "EventSink",
+    "InMemorySink",
+    "event_to_dict",
     "__version__",
 ]
