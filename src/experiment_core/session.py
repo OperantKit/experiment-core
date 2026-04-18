@@ -106,21 +106,10 @@ class Session:
         self._component_responses[operandum] += 1
         # Notify the schedule for COD bookkeeping.
         concurrent: ConcurrentSchedule = self.schedule  # type: ignore[assignment]
-        concurrent.note_response(operandum, timestamp)
+        concurrent.note_response_on(operandum, timestamp)
         # Drive the schedule evaluation with the updated counts.
         total = sum(self._component_responses)
         self.update(timestamp, total)
-
-    def _notify_response(self, timestamp: float) -> None:
-        """Notify the schedule of a response, if it supports ``note_response``.
-
-        Used by schedules (for example DRO) that need to reset their
-        internal timer on every response regardless of whether reinforcement
-        is delivered. Backward-compatible: schedules without
-        ``note_response`` are unaffected.
-        """
-        if hasattr(self.schedule, "note_response"):
-            self.schedule.note_response(timestamp)  # type: ignore[union-attr]
 
     def update(self, timestamp: float, total_responses: int) -> None:
         """Advance the session to ``timestamp`` with ``total_responses`` accrued."""

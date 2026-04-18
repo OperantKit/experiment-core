@@ -28,12 +28,7 @@ class DelayFunction:
     signal_factor: float = 0.5
     individual_sensitivity: float = 1.0
 
-    def calculate_potency(
-        self,
-        delay_duration: float,
-        is_signaled: bool,
-        context_stimuli: list[str] | None = None,
-    ) -> float:
+    def calculate_potency(self, delay_duration: float, is_signaled: bool) -> float:
         """Calculate the effective potency of a reinforcer.
 
         Parameters
@@ -43,9 +38,6 @@ class DelayFunction:
             reinforcer delivery.
         is_signaled : bool
             ``True`` if a signaling stimulus is present during the delay.
-        context_stimuli : Optional[list[str]]
-            Additional contextual stimuli present during the delay.
-            Reserved for future expansion; currently unused.
 
         Returns
         -------

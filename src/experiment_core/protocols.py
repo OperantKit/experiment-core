@@ -19,9 +19,7 @@ class Schedule(Protocol):
 
     Single-component schedules are queried via ``is_satisfied`` on each
     ``Session.update`` tick. ``next`` advances any internal state used by
-    variable schedules after a reinforcer is delivered. The optional
-    ``note_response`` hook allows schedules (for example DRO) to observe
-    every response regardless of reinforcement.
+    variable schedules after a reinforcer is delivered.
     """
 
     def is_satisfied(self, observation: Observation) -> bool:
@@ -50,8 +48,13 @@ class ConcurrentSchedule(Protocol):
         """Return the index of a satisfied component, or ``None``."""
         ...
 
-    def note_response(self, operandum: int, timestamp: float) -> None:
-        """Notify the schedule that a response occurred on ``operandum``."""
+    def note_response_on(self, operandum: int, timestamp: float) -> None:
+        """Notify the schedule that a response occurred on ``operandum``.
+
+        Named distinctly from any future single-component ``note_response``
+        hook so a single class can satisfy both :class:`Schedule` and
+        :class:`ConcurrentSchedule` without signature collision.
+        """
         ...
 
     def next(self) -> None:

@@ -41,5 +41,5 @@ class FakeConcurrent:
     def next(self) -> None:  # pragma: no cover - trivial
         return None
 
-    def note_response(self, operandum: int, timestamp: float) -> None:
+    def note_response_on(self, operandum: int, timestamp: float) -> None:
         self.responses_by_operandum.append((operandum, timestamp))

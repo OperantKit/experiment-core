@@ -90,6 +90,23 @@ def test_realtime_clock_satisfies_protocol() -> None:
     assert isinstance(clock, Clock)
 
 
+@pytest.mark.unit
+def test_realtime_clock_reset_rejects_negative_start() -> None:
+    clock = RealtimeClock()
+    clock.now()
+    with pytest.raises(ValueError):
+        clock.reset(start=-0.1)
+
+
+@pytest.mark.unit
+def test_realtime_clock_reset_allows_zero_or_positive() -> None:
+    clock = RealtimeClock()
+    clock.now()
+    clock.reset(start=0.0)
+    clock.reset(start=5.0)
+    assert clock.now() >= 5.0
+
+
 @pytest.mark.integration
 def test_virtual_clock_drives_session_without_wall_time() -> None:
     """VirtualClock + Session can run a schedule without waiting."""

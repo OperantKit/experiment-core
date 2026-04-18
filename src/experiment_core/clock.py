@@ -85,5 +85,7 @@ class RealtimeClock:
         return self._offset + (time.monotonic() - self._epoch)
 
     def reset(self, start: float = 0.0) -> None:
+        if start < 0.0:
+            raise ValueError("start must be non-negative")
         self._offset = float(start)
         self._epoch = None

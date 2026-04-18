@@ -16,7 +16,7 @@ def test_handle_response_on_routes_to_component() -> None:
     session.handle_response_on(operandum=0, timestamp=0.5)
     session.handle_response_on(operandum=0, timestamp=1.0)
 
-    # schedule.note_response was invoked on each handle_response_on call.
+    # schedule.note_response_on was invoked on each handle_response_on call.
     assert schedule.responses_by_operandum == [(0, 0.5), (0, 1.0)]
 
     # Component 0 has met its target so reinforcement fires.

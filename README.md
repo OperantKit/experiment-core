@@ -57,6 +57,31 @@ mise exec -- .venv/bin/python -m pip install -e '.[dev]'
 .venv/bin/black src tests
 ```
 
+## Scope
+
+This package owns:
+
+| Module | Exports |
+|---|---|
+| `session` | `Session` |
+| `context` | `ExperimentContext` |
+| `renewal` | `RenewalParadigm`, `ContextualSession`, `RenewalExperiment`, `PhaseRecord`, `PhaseResult`, `renewal_index` |
+| `events` | `SessionState`, `ResponseEvent`, `ReinforcerStartEvent`, `ReinforcerEndEvent`, `StateChangeEvent`, `SessionEvent` |
+| `exit_condition` | `ExitCondition`, `ReinforcementCountExit`, `TimeLimitExit` |
+| `observation` | `Observation` |
+| `delay` | `DelayFunction` |
+| `protocols` | `Schedule`, `ConcurrentSchedule` |
+| `clock` | `Clock`, `VirtualClock`, `RealtimeClock` |
+| `sink` | `EventSink`, `InMemorySink`, `event_to_dict` |
+
+Explicit non-goals (belong to other packages or the next design round):
+
+- Experiment protocol loader (YAML/JSON → runtime graph) and `ExperimentCore` façade — deferred to a higher-level orchestrator package. The v0 `ExperimentCore` / `ExecutionEnvironmentAdapter` / `DataManager` abstractions are **not ported**; they were scaffolding for a simulator-oriented v0 workflow and do not fit the Protocol-boundary model adopted here.
+- Persistence / JSONL logging — `session-recorder` consumes `SessionEvent` via :class:`EventSink`.
+- Concrete reinforcement schedules — `contingency-py` (future) implements the `Schedule` Protocol.
+- Stimulus / reinforcer metadata — `contingency-annotator`.
+- Hardware I/O — `experiment-io`.
+
 ## References
 
 - Bouton, M. E., & Bolles, R. C. (1979). Contextual control of the extinction of conditioned fear. *Learning and Motivation*, 10(4), 445–466. https://doi.org/10.1016/0023-9690(79)90057-2
