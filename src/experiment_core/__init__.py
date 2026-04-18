@@ -6,6 +6,7 @@ Schedule runtime is accessed via Protocol (see :mod:`experiment_core.protocols`)
 All time values in this package are canonical seconds (float).
 """
 
+from .clock import Clock, RealtimeClock, VirtualClock
 from .context import ExperimentContext
 from .delay import DelayFunction
 from .events import (
@@ -32,6 +33,9 @@ from .session import Session
 __version__ = "0.1.0a0"
 
 __all__ = [
+    "Clock",
+    "VirtualClock",
+    "RealtimeClock",
     "ExperimentContext",
     "Session",
     "SessionState",
