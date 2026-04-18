@@ -2,6 +2,42 @@
 
 Session lifecycle, ExperimentContext, and Renewal paradigms.
 Schedule runtime is accessed via Protocol (see :mod:`experiment_core.protocols`).
+
+All time values in this package are canonical seconds (float).
 """
 
+from .context import ExperimentContext
+from .delay import DelayFunction
+from .events import (
+    ReinforcerEndEvent,
+    ReinforcerStartEvent,
+    ResponseEvent,
+    SessionEvent,
+    SessionState,
+    StateChangeEvent,
+)
+from .exit_condition import ExitCondition, ReinforcementCountExit, TimeLimitExit
+from .observation import Observation
+from .protocols import ConcurrentSchedule, Schedule
+from .session import Session
+
 __version__ = "0.1.0a0"
+
+__all__ = [
+    "ExperimentContext",
+    "Session",
+    "SessionState",
+    "ResponseEvent",
+    "ReinforcerStartEvent",
+    "ReinforcerEndEvent",
+    "StateChangeEvent",
+    "SessionEvent",
+    "Observation",
+    "DelayFunction",
+    "ExitCondition",
+    "ReinforcementCountExit",
+    "TimeLimitExit",
+    "Schedule",
+    "ConcurrentSchedule",
+    "__version__",
+]
