@@ -1,5 +1,7 @@
 # experiment-core
 
+:jp: [日本語版 README](README.ja.md)
+
 Experimental orchestration core for operantkit.
 
 ## Role

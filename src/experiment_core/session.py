@@ -25,6 +25,47 @@ def _is_concurrent_schedule(schedule: object) -> bool:
     return hasattr(schedule, "n_components") and hasattr(schedule, "which_satisfied")
 
 
+def _is_contingency_schedule(schedule: object) -> bool:
+    """Structural check for a :mod:`contingency` schedule.
+
+    Single-component ``contingency`` schedules expose ``step(now, event)
+    -> Outcome`` + ``reset()`` (see :mod:`contingency.interfaces`). They
+    do not expose ``is_satisfied`` / ``next``. Compound concurrent
+    schedules from ``contingency.schedules.concurrent.Concurrent`` are
+    plain schedules that additionally accept
+    ``ResponseEvent.operandum`` — no separate ``ConcurrentSchedule``
+    surface is needed here.
+    """
+    return (
+        hasattr(schedule, "step")
+        and hasattr(schedule, "reset")
+        and not hasattr(schedule, "is_satisfied")
+    )
+
+
+def _contingency_step_satisfied(
+    schedule: object,
+    current_time: float,
+    is_new_response: bool,
+    operandum: str = "main",
+) -> bool:
+    """Invoke a ``contingency.Schedule.step`` and return its ``reinforced`` flag.
+
+    This helper lets :class:`Session` drive both the legacy
+    ``is_satisfied/next`` Protocol and the canonical ``contingency``
+    step/reset API from the same update tick.
+
+    ``operandum`` is threaded through so concurrent schedules can route
+    the event to the correct component. Single-operandum callers use
+    the default ``"main"``.
+    """
+    from contingency.entities import ResponseEvent as CResponseEvent
+
+    event = CResponseEvent(time=current_time, operandum=operandum) if is_new_response else None
+    outcome = schedule.step(current_time, event)  # type: ignore[attr-defined]
+    return bool(outcome.reinforced)
+
+
 class Session:
     """Single- or multi-component reinforcement session.
 
@@ -74,6 +115,13 @@ class Session:
         # The operandum index of the most recent reinforcement (used to
         # tag the matching ReinforcerEndEvent).
         self._last_reinforced_operandum: int | None = None
+
+        # Schedule API dispatch flag: ``contingency.Schedule`` uses
+        # ``step(now, event) -> Outcome`` whereas legacy ``experiment_core.
+        # Schedule`` uses ``is_satisfied(observation)``. Both are supported
+        # on the same code path during the SCOPE-alignment migration; see
+        # ``~/.claude/plans/experiment-core-scope-alignment.md``.
+        self._uses_contingency_api: bool = _is_contingency_schedule(schedule)
 
     def start(self, timestamp: float) -> None:
         """Begin the session. No-op if not in :attr:`SessionState.IDLE`."""
@@ -210,7 +258,12 @@ class Session:
                 self._transition_to(SessionState.REINFORCING, timestamp)
             return
 
-        if self.schedule.is_satisfied(self.observation):
+        satisfied = (
+            _contingency_step_satisfied(self.schedule, timestamp, is_new_response)
+            if self._uses_contingency_api
+            else self.schedule.is_satisfied(self.observation)
+        )
+        if satisfied:
             trigger_ts = self.observation.timestamp_of_triggering_response
             self._pending_trigger_timestamp = trigger_ts
             delay_duration = max(0.0, timestamp - trigger_ts)
@@ -235,7 +288,8 @@ class Session:
             if self._is_concurrent and op is not None:
                 self._last_reinforcement_time_per[op] = timestamp
                 self._last_reinforcement_responses_per[op] = self._component_responses[op]
-            self.schedule.next()
+            if not self._uses_contingency_api:
+                self.schedule.next()
             self._last_reinforced_operandum = None
             self._pending_trigger_timestamp = None
             self._transition_to(SessionState.RUNNING, timestamp)

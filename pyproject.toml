@@ -5,12 +5,13 @@ build-backend = "hatchling.build"
 [project]
 name = "experiment-core"
 version = "0.1.0a0"
-description = "Experimental orchestration core for operantkit: Session lifecycle, ExperimentContext, Renewal (ABA/AAB/ABC). Imports schedule runtime via Protocol."
+description = "Experimental orchestration core for operantkit: Session lifecycle, ExperimentContext, Renewal (ABA/AAB/ABC). Drives contingency-py schedules via step/reset; legacy is_satisfied Protocol supported during migration."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "operantkit contributors" }]
 dependencies = [
+    "contingency-py",
     "contingency-dsl-py",
 ]
 
