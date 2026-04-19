@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 
 import pytest
+from contingency import ScheduleBuilder
 
 from experiment_core import (
     Observation,
@@ -22,8 +23,6 @@ from experiment_core import (
     VirtualClock,
 )
 from experiment_core.sink import EventSink, InMemorySink, event_to_dict
-
-from ._fakes import FakeConcurrent, FakeFR
 
 
 @pytest.mark.unit
@@ -70,7 +69,7 @@ def test_session_events_flow_to_sink_with_virtual_clock() -> None:
     clock = VirtualClock()
     sink = InMemorySink()
 
-    session = Session(schedule=FakeFR(target=2))
+    session = Session(schedule=ScheduleBuilder.fr(2))
     session.start(clock.now())
 
     responses = 0
@@ -115,7 +114,9 @@ def test_concurrent_session_events_tagged_with_operandum() -> None:
     clock = VirtualClock()
     sink = InMemorySink()
 
-    schedule = FakeConcurrent(targets=[1, 1])
+    schedule = ScheduleBuilder.concurrent(
+        {"op0": ScheduleBuilder.fr(1), "op1": ScheduleBuilder.fr(1)}
+    )
     session = Session(schedule=schedule)
     session.start(clock.now())
 
@@ -154,7 +155,7 @@ def test_sink_satisfies_downstream_event_flow_contract() -> None:
             self.count += 1
 
     clock = VirtualClock()
-    session = Session(schedule=FakeFR(target=1))
+    session = Session(schedule=ScheduleBuilder.fr(1))
     sink: EventSink = CountingSink()
     assert isinstance(sink, EventSink)
 

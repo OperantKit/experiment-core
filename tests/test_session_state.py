@@ -1,6 +1,7 @@
 """Session lifecycle state-transition tests."""
 
 import pytest
+from contingency import ScheduleBuilder
 
 from experiment_core import (
     ReinforcementCountExit,
@@ -9,12 +10,10 @@ from experiment_core import (
     TimeLimitExit,
 )
 
-from ._fakes import FakeFR
-
 
 @pytest.mark.unit
 def test_session_starts_idle_and_transitions_to_running() -> None:
-    session = Session(schedule=FakeFR(target=1))
+    session = Session(schedule=ScheduleBuilder.fr(1))
     assert session.state == SessionState.IDLE
     session.start(timestamp=0.0)
     assert session.state == SessionState.RUNNING
@@ -22,7 +21,7 @@ def test_session_starts_idle_and_transitions_to_running() -> None:
 
 @pytest.mark.unit
 def test_fr1_runs_through_running_reinforcing_running() -> None:
-    session = Session(schedule=FakeFR(target=1))
+    session = Session(schedule=ScheduleBuilder.fr(1))
     session.start(timestamp=0.0)
     assert session.state == SessionState.RUNNING
 
@@ -36,7 +35,7 @@ def test_fr1_runs_through_running_reinforcing_running() -> None:
 @pytest.mark.unit
 def test_reinforcement_count_exit_triggers_finished() -> None:
     session = Session(
-        schedule=FakeFR(target=1),
+        schedule=ScheduleBuilder.fr(1),
         exit_condition=ReinforcementCountExit(count=2),
     )
     session.start(timestamp=0.0)
@@ -61,7 +60,7 @@ def test_reinforcement_count_exit_triggers_finished() -> None:
 @pytest.mark.unit
 def test_time_limit_exit_triggers_finished() -> None:
     session = Session(
-        schedule=FakeFR(target=100),
+        schedule=ScheduleBuilder.fr(100),
         exit_condition=TimeLimitExit(limit=1.0),
     )
     session.start(timestamp=0.0)

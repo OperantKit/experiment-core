@@ -3,10 +3,9 @@
 import math
 
 import pytest
+from contingency import ScheduleBuilder
 
 from experiment_core import ReinforcerStartEvent, Session
-
-from ._fakes import FakeFR
 
 ABS_TOL = 1e-9
 
@@ -19,7 +18,7 @@ def _inject_reinforcer(session: Session, timestamp: float, potency: float, rid: 
 
 @pytest.mark.unit
 def test_rate_zero_before_any_reinforcement() -> None:
-    session = Session(schedule=FakeFR(target=1))
+    session = Session(schedule=ScheduleBuilder.fr(1))
     session.start(timestamp=0.0)
     assert session.get_reinforcement_rate(current_time=10.0) == 0.0
     assert session.get_effective_reinforcement_rate(current_time=10.0) == 0.0
@@ -27,7 +26,7 @@ def test_rate_zero_before_any_reinforcement() -> None:
 
 @pytest.mark.unit
 def test_reinforcement_rate_full_potency() -> None:
-    session = Session(schedule=FakeFR(target=1))
+    session = Session(schedule=ScheduleBuilder.fr(1))
     session.start(timestamp=0.0)
     for i, t in enumerate((1.0, 2.0, 3.0), start=1):
         _inject_reinforcer(session, timestamp=t, potency=1.0, rid=i)
@@ -43,7 +42,7 @@ def test_reinforcement_rate_full_potency() -> None:
 
 @pytest.mark.unit
 def test_effective_rate_is_lower_with_partial_potency() -> None:
-    session = Session(schedule=FakeFR(target=1))
+    session = Session(schedule=ScheduleBuilder.fr(1))
     session.start(timestamp=0.0)
     _inject_reinforcer(session, timestamp=1.0, potency=1.0, rid=1)
     _inject_reinforcer(session, timestamp=2.0, potency=0.5, rid=2)
@@ -63,7 +62,7 @@ def test_effective_rate_is_lower_with_partial_potency() -> None:
 
 @pytest.mark.unit
 def test_effective_rate_with_window_excludes_outside_events() -> None:
-    session = Session(schedule=FakeFR(target=1))
+    session = Session(schedule=ScheduleBuilder.fr(1))
     session.start(timestamp=0.0)
     _inject_reinforcer(session, timestamp=1.0, potency=1.0, rid=1)  # outside window
     _inject_reinforcer(session, timestamp=5.0, potency=1.0, rid=2)  # inside

@@ -1,8 +1,6 @@
-from dataclasses import dataclass
-
 import pytest
+from contingency import ScheduleBuilder
 
-from experiment_core import Observation
 from experiment_core.context import ExperimentContext
 from experiment_core.renewal import (
     ContextualSession,
@@ -12,18 +10,16 @@ from experiment_core.renewal import (
     RenewalParadigm,
     renewal_index,
 )
-from tests._fakes import FakeFR
 
 
-@dataclass
-class FakeExtinction:
-    """Fake extinction schedule: never satisfied."""
+def FakeFR(target: int):  # noqa: N802 - keep legacy call sites unchanged
+    """Shim returning a real ``contingency`` FR(target) schedule."""
+    return ScheduleBuilder.fr(target)
 
-    def is_satisfied(self, obs: Observation) -> bool:
-        return False
 
-    def next(self) -> None:  # pragma: no cover - trivial
-        return None
+def FakeExtinction():  # noqa: N802 - keep legacy call sites unchanged
+    """Shim returning a real ``contingency`` extinction schedule."""
+    return ScheduleBuilder.ext()
 
 
 # ---------------------------------------------------------------------------

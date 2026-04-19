@@ -3,10 +3,9 @@
 import math
 
 import pytest
+from contingency import ScheduleBuilder
 
 from experiment_core import DelayFunction, ReinforcerStartEvent, Session, SessionState
-
-from ._fakes import FakeFR
 
 ABS_TOL = 1e-9
 
@@ -14,7 +13,7 @@ ABS_TOL = 1e-9
 @pytest.mark.unit
 def test_potency_with_zero_delay_reinforcement() -> None:
     """Response and reinforcement on the same tick yields potency 1.0."""
-    session = Session(schedule=FakeFR(target=1))
+    session = Session(schedule=ScheduleBuilder.fr(1))
     session.start(timestamp=0.0)
 
     session.update(timestamp=1.0, total_responses=1)
@@ -47,7 +46,7 @@ def test_potency_with_non_zero_delay_reinforcement(
     expected_delay: float,
 ) -> None:
     """A deferred reinforcement tick refines potency from the trigger response."""
-    session = Session(schedule=FakeFR(target=1))
+    session = Session(schedule=ScheduleBuilder.fr(1))
     session.start(timestamp=0.0)
 
     # Satisfying response.
@@ -70,7 +69,7 @@ def test_potency_with_non_zero_delay_reinforcement(
 @pytest.mark.unit
 def test_multiple_potency_recordings_with_varying_delays() -> None:
     """Multiple reinforcers with different delays each record correct potency."""
-    session = Session(schedule=FakeFR(target=1))
+    session = Session(schedule=ScheduleBuilder.fr(1))
     session.start(timestamp=0.0)
 
     delay_configs = [

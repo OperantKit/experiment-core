@@ -110,11 +110,12 @@ def test_realtime_clock_reset_allows_zero_or_positive() -> None:
 @pytest.mark.integration
 def test_virtual_clock_drives_session_without_wall_time() -> None:
     """VirtualClock + Session can run a schedule without waiting."""
+    from contingency import ScheduleBuilder
+
     from experiment_core import Session, SessionState
-    from tests._fakes import FakeFR
 
     clock = VirtualClock()
-    session = Session(schedule=FakeFR(target=3))
+    session = Session(schedule=ScheduleBuilder.fr(3))
     session.start(clock.now())
 
     responses = 0

@@ -1,7 +1,13 @@
 """Session lifecycle and reinforcement bookkeeping.
 
-All time values are canonical seconds (float).
+All time values are canonical seconds (float). ``Session`` drives
+:class:`contingency.Schedule` instances directly via their
+``step(now, event) -> Outcome`` + ``reset()`` API.
 """
+
+from __future__ import annotations
+
+from contingency.entities import ResponseEvent as _CResponseEvent
 
 from .delay import DelayFunction
 from .events import (
@@ -13,66 +19,38 @@ from .events import (
 )
 from .exit_condition import ExitCondition, ReinforcementCountExit, TimeLimitExit
 from .observation import Observation
-from .protocols import ConcurrentSchedule, Schedule
+from .protocols import Schedule
 
 
-def _is_concurrent_schedule(schedule: object) -> bool:
-    """Structural check for ConcurrentSchedule protocol conformance.
+def _is_contingency_concurrent(schedule: object) -> bool:
+    """Detect :class:`contingency.schedules.concurrent.Concurrent`.
 
-    ``typing.Protocol`` ``isinstance`` checks only inspect attribute presence,
-    so we match the same semantics explicitly via ``hasattr``.
+    A compound concurrent schedule carries a ``components`` mapping
+    (operandum key -> component schedule). Responses are routed via
+    :attr:`contingency.entities.ResponseEvent.operandum`.
     """
-    return hasattr(schedule, "n_components") and hasattr(schedule, "which_satisfied")
+    return hasattr(schedule, "components") and hasattr(schedule, "step")
 
 
-def _is_contingency_schedule(schedule: object) -> bool:
-    """Structural check for a :mod:`contingency` schedule.
-
-    Single-component ``contingency`` schedules expose ``step(now, event)
-    -> Outcome`` + ``reset()`` (see :mod:`contingency.interfaces`). They
-    do not expose ``is_satisfied`` / ``next``. Compound concurrent
-    schedules from ``contingency.schedules.concurrent.Concurrent`` are
-    plain schedules that additionally accept
-    ``ResponseEvent.operandum`` — no separate ``ConcurrentSchedule``
-    surface is needed here.
-    """
-    return (
-        hasattr(schedule, "step")
-        and hasattr(schedule, "reset")
-        and not hasattr(schedule, "is_satisfied")
-    )
-
-
-def _contingency_step_satisfied(
-    schedule: object,
-    current_time: float,
+def _step_satisfied(
+    schedule: Schedule,
+    now: float,
     is_new_response: bool,
     operandum: str = "main",
 ) -> bool:
-    """Invoke a ``contingency.Schedule.step`` and return its ``reinforced`` flag.
-
-    This helper lets :class:`Session` drive both the legacy
-    ``is_satisfied/next`` Protocol and the canonical ``contingency``
-    step/reset API from the same update tick.
-
-    ``operandum`` is threaded through so concurrent schedules can route
-    the event to the correct component. Single-operandum callers use
-    the default ``"main"``.
-    """
-    from contingency.entities import ResponseEvent as CResponseEvent
-
-    event = CResponseEvent(time=current_time, operandum=operandum) if is_new_response else None
-    outcome = schedule.step(current_time, event)  # type: ignore[attr-defined]
+    """Drive a single :meth:`contingency.Schedule.step` and return ``reinforced``."""
+    event = _CResponseEvent(time=now, operandum=operandum) if is_new_response else None
+    outcome = schedule.step(now, event)
     return bool(outcome.reinforced)
 
 
 class Session:
-    """Single- or multi-component reinforcement session.
+    """Reinforcement session driver.
 
-    The session owns an :class:`Observation`, a schedule, and an event log.
-    Callers drive the session with :meth:`start`, :meth:`update` (and/or
-    :meth:`handle_response_on` for concurrent schedules), and
-    :meth:`end_reinforcement`.
+    Accepts any :class:`contingency.Schedule` — atomic (FR, VR, FI, VI, ...)
+    or compound :class:`contingency.schedules.concurrent.Concurrent`.
+    Single-operandum callers drive the session with :meth:`update`;
+    concurrent callers use :meth:`handle_response_on`.
     """
 
     def __init__(
@@ -92,36 +70,37 @@ class Session:
         self.start_time: float | None = None
         self._last_reinforcement_time: float = 0.0
 
-        # Delay of Reinforcement related
+        # Delay of Reinforcement related.
         self.delay_function: DelayFunction = DelayFunction()
         self.default_reinforcer_value: float = default_reinforcer_value
 
         # Timestamp of the response that triggered the most-recent (pending)
-        # reinforcement. Used to compute delay-to-delivery when
-        # reinforcement actually starts on a later update tick.
+        # reinforcement. Used to compute delay-to-delivery when reinforcement
+        # actually starts on a later update tick.
         self._pending_trigger_timestamp: float | None = None
 
         # --- Concurrent (multi-operandum) bookkeeping ----------------
-        # When ``schedule`` conforms to ConcurrentSchedule we maintain
-        # per-component response counts and per-component last-reinforcement
-        # times so the runner can drive the session via
-        # :meth:`handle_response_on`. Single-component sessions leave
-        # these untouched.
-        self._is_concurrent: bool = _is_concurrent_schedule(schedule)
-        n_components: int = schedule.n_components if self._is_concurrent else 0
+        self._is_concurrent: bool = _is_contingency_concurrent(schedule)
+        self._concurrent_component_keys: list[str] = (
+            list(schedule.components.keys())  # type: ignore[attr-defined]
+            if self._is_concurrent
+            else []
+        )
+        n_components = len(self._concurrent_component_keys)
         self._component_responses: list[int] = [0] * n_components
         self._last_reinforcement_responses_per: list[int] = [0] * n_components
         self._last_reinforcement_time_per: list[float] = [0.0] * n_components
-        # The operandum index of the most recent reinforcement (used to
-        # tag the matching ReinforcerEndEvent).
-        self._last_reinforced_operandum: int | None = None
 
-        # Schedule API dispatch flag: ``contingency.Schedule`` uses
-        # ``step(now, event) -> Outcome`` whereas legacy ``experiment_core.
-        # Schedule`` uses ``is_satisfied(observation)``. Both are supported
-        # on the same code path during the SCOPE-alignment migration; see
-        # ``~/.claude/plans/experiment-core-scope-alignment.md``.
-        self._uses_contingency_api: bool = _is_contingency_schedule(schedule)
+        # Operandum (string key) of the in-flight response on the current
+        # update tick. Populated by :meth:`handle_response_on` and consumed
+        # by :meth:`update`.
+        self._pending_response_operandum: str | None = None
+        # Integer operandum index of the same in-flight response, used to
+        # tag ``ReinforcerStartEvent`` / ``ReinforcerEndEvent``.
+        self._last_intended_operandum: int | None = None
+        # The operandum index of the most recent reinforcement (used to tag
+        # the matching ``ReinforcerEndEvent``).
+        self._last_reinforced_operandum: int | None = None
 
     def start(self, timestamp: float) -> None:
         """Begin the session. No-op if not in :attr:`SessionState.IDLE`."""
@@ -139,11 +118,12 @@ class Session:
 
         Callers driving a single-component session should keep using
         :meth:`update`. This method is invoked by runners that dispatch
-        responses to one of several operanda on a concurrent schedule.
+        responses to one of several operanda on a
+        :class:`contingency.schedules.concurrent.Concurrent` schedule.
         """
         if not self._is_concurrent:
             raise ValueError(
-                "handle_response_on requires a ConcurrentSchedule; "
+                "handle_response_on requires a concurrent schedule; "
                 "use update() for single-component sessions."
             )
         if not (0 <= operandum < len(self._component_responses)):
@@ -152,10 +132,10 @@ class Session:
                 f"(n_components={len(self._component_responses)})"
             )
         self._component_responses[operandum] += 1
-        # Notify the schedule for COD bookkeeping.
-        concurrent: ConcurrentSchedule = self.schedule  # type: ignore[assignment]
-        concurrent.note_response_on(operandum, timestamp)
-        # Drive the schedule evaluation with the updated counts.
+        self._pending_response_operandum = self._concurrent_component_keys[operandum]
+        self._last_intended_operandum = operandum
+
+        # Drive the schedule evaluation with the updated total.
         total = sum(self._component_responses)
         self.update(timestamp, total)
 
@@ -165,26 +145,20 @@ class Session:
         # and ReinforcerEndEvent) subsequent update() calls "refine" the
         # pending reinforcement by updating its event timestamp and potency
         # to reflect the delay between the triggering response and the
-        # actual delivery time. This models reinforcement-delay effects
-        # where the reinforcer is committed at response time but delivered
-        # after some latency.
+        # actual delivery time.
         if self.state == SessionState.REINFORCING:
             if self._pending_trigger_timestamp is None:
                 return
-            # Only refine when no new response occurred on this tick,
-            # i.e. this is a pure time advance toward reinforcement delivery.
             if total_responses == self.observation.total_responses:
                 delay_duration = timestamp - self._pending_trigger_timestamp
                 if delay_duration < 0:
                     delay_duration = 0.0
                 potency = self.delay_function.calculate_potency(delay_duration, is_signaled=False)
-                # Update the most recent ReinforcerStartEvent in place.
                 for evt in reversed(self.events):
                     if isinstance(evt, ReinforcerStartEvent):
                         evt.timestamp = timestamp
                         evt.potency = potency
                         break
-                # Keep reinforcement_history in sync.
                 if self.reinforcement_history:
                     count = self.reinforcement_history[-1][1]
                     self.reinforcement_history[-1] = (timestamp, count)
@@ -193,7 +167,7 @@ class Session:
         if self.state != SessionState.RUNNING:
             return
 
-        # Check Exit Conditions
+        # Check exit conditions.
         if self.exit_condition:
             if isinstance(self.exit_condition, ReinforcementCountExit):
                 if self.reinforcement_count >= self.exit_condition.count:
@@ -204,9 +178,6 @@ class Session:
                     self._transition_to(SessionState.FINISHED, timestamp)
                     return
 
-        # Detect whether this update carries a new response. The triggering
-        # response timestamp is the time at which the satisfying response
-        # occurred (used for delay-of-reinforcement calculations).
         is_new_response = total_responses > self.observation.total_responses
 
         self.observation.current_time = timestamp
@@ -231,50 +202,40 @@ class Session:
             self.observation.component_time_since_reinforcement = [
                 timestamp - t for t in self._last_reinforcement_time_per
             ]
-            concurrent: ConcurrentSchedule = self.schedule  # type: ignore[assignment]
-            idx = concurrent.which_satisfied(self.observation)
+            op_key = self._pending_response_operandum
+            self._pending_response_operandum = None
+            reinforced = _step_satisfied(
+                self.schedule,
+                timestamp,
+                is_new_response,
+                operandum=op_key or "main",
+            )
+            idx = self._last_intended_operandum if reinforced else None
             if idx is not None:
-                # Calculate initial potency using the delay between the
-                # triggering response and the current tick. For an update
-                # where the triggering response arrived on the same tick
-                # this is 0; subsequent refinement (see REINFORCING branch
-                # above) will update the event if delivery is deferred.
-                trigger_ts = self.observation.timestamp_of_triggering_response
-                self._pending_trigger_timestamp = trigger_ts
-                delay_duration = max(0.0, timestamp - trigger_ts)
-                potency = self.delay_function.calculate_potency(delay_duration, is_signaled=False)
-
-                self.reinforcement_count += 1
-                self.reinforcement_history.append((timestamp, self.reinforcement_count))
-                self._last_reinforced_operandum = idx
-                self.events.append(
-                    ReinforcerStartEvent(
-                        self.reinforcement_count,
-                        timestamp,
-                        operandum=idx,
-                        potency=potency,
-                    )
-                )
-                self._transition_to(SessionState.REINFORCING, timestamp)
+                self._start_reinforcement(timestamp, operandum=idx)
             return
 
-        satisfied = (
-            _contingency_step_satisfied(self.schedule, timestamp, is_new_response)
-            if self._uses_contingency_api
-            else self.schedule.is_satisfied(self.observation)
-        )
-        if satisfied:
-            trigger_ts = self.observation.timestamp_of_triggering_response
-            self._pending_trigger_timestamp = trigger_ts
-            delay_duration = max(0.0, timestamp - trigger_ts)
-            potency = self.delay_function.calculate_potency(delay_duration, is_signaled=False)
+        if _step_satisfied(self.schedule, timestamp, is_new_response):
+            self._start_reinforcement(timestamp, operandum=None)
 
-            self.reinforcement_count += 1
-            self.reinforcement_history.append((timestamp, self.reinforcement_count))
-            self.events.append(
-                ReinforcerStartEvent(self.reinforcement_count, timestamp, potency=potency)
+    def _start_reinforcement(self, timestamp: float, operandum: int | None) -> None:
+        trigger_ts = self.observation.timestamp_of_triggering_response
+        self._pending_trigger_timestamp = trigger_ts
+        delay_duration = max(0.0, timestamp - trigger_ts)
+        potency = self.delay_function.calculate_potency(delay_duration, is_signaled=False)
+
+        self.reinforcement_count += 1
+        self.reinforcement_history.append((timestamp, self.reinforcement_count))
+        self._last_reinforced_operandum = operandum
+        self.events.append(
+            ReinforcerStartEvent(
+                self.reinforcement_count,
+                timestamp,
+                operandum=operandum,
+                potency=potency,
             )
-            self._transition_to(SessionState.REINFORCING, timestamp)
+        )
+        self._transition_to(SessionState.REINFORCING, timestamp)
 
     def end_reinforcement(self, timestamp: float) -> None:
         """Conclude the current reinforcer delivery and return to RUNNING."""
@@ -288,14 +249,12 @@ class Session:
             if self._is_concurrent and op is not None:
                 self._last_reinforcement_time_per[op] = timestamp
                 self._last_reinforcement_responses_per[op] = self._component_responses[op]
-            if not self._uses_contingency_api:
-                self.schedule.next()
             self._last_reinforced_operandum = None
             self._pending_trigger_timestamp = None
             self._transition_to(SessionState.RUNNING, timestamp)
-            # Re-evaluate the exit condition immediately so callers do
-            # not need to issue an extra response/tick to discover that
-            # the session is over.
+            # Re-evaluate the exit condition immediately so callers do not
+            # need to issue an extra response/tick to discover that the
+            # session is over.
             self.update(timestamp, self.observation.total_responses)
 
     def _transition_to(self, next_state: SessionState, timestamp: float) -> None:
@@ -346,24 +305,11 @@ class Session:
         """Calculate the effective reinforcement rate (effective reinforcers/min).
 
         Each reinforcer's contribution is weighted by its potency.
-
-        Parameters
-        ----------
-        current_time : float
-            The current timestamp for calculation.
-        window : Optional[float]
-            The time window (seconds) over which to calculate the rate.
-            If ``None``, the rate is calculated over the entire session duration.
-
-        Returns
-        -------
-        float
-            The effective reinforcement rate (effective reinforcers per minute).
         """
         if self.start_time is None or not self.events:
             return 0.0
 
-        relevant_reinforcers = []
+        relevant_reinforcers: list[ReinforcerStartEvent] = []
         for event in self.events:
             if isinstance(event, ReinforcerStartEvent):
                 if window is None or (current_time - window <= event.timestamp <= current_time):
@@ -374,19 +320,11 @@ class Session:
 
         effective_reinforcement_count = sum(event.potency for event in relevant_reinforcers)
 
-        duration_sec = 0.0
         if window:
             duration_sec = window
         else:
-            duration_sec = current_time - self.start_time
-            if self.start_time is not None:
-                # Adjust duration for events before start_time if window is None
-                min_event_time = (
-                    min(e.timestamp for e in relevant_reinforcers)
-                    if relevant_reinforcers
-                    else self.start_time
-                )
-                duration_sec = current_time - min(self.start_time, min_event_time)
+            min_event_time = min(e.timestamp for e in relevant_reinforcers)
+            duration_sec = current_time - min(self.start_time, min_event_time)
 
         if duration_sec <= 0:
             return 0.0

@@ -1,62 +1,16 @@
-"""Schedule and ConcurrentSchedule Protocols used by :class:`Session`.
+"""Schedule Protocol — aliased to :class:`contingency.Schedule`.
 
-These Protocols describe the minimal surface that :class:`Session` depends
-on from schedule implementations. Concrete schedule classes live in
-separate packages (for example ``contingency-py``); ``experiment-core``
-talks to them structurally via these Protocols.
-
-All time values are canonical seconds (float).
+experiment-core drives ``contingency`` schedules directly via
+``Schedule.step(now, event) -> Outcome`` + ``Schedule.reset()``. The
+package no longer declares its own schedule Protocol. Compound concurrent
+schedules are modelled by :class:`contingency.schedules.concurrent.Concurrent`,
+whose :attr:`~contingency.schedules.concurrent.Concurrent.components`
+mapping carries the operandum keys; no separate ``ConcurrentSchedule``
+type is required.
 """
 
-from typing import Protocol, runtime_checkable
+from __future__ import annotations
 
-from .observation import Observation
+from contingency import Schedule
 
-
-@runtime_checkable
-class Schedule(Protocol):
-    """Minimal schedule interface required by :class:`Session`.
-
-    Single-component schedules are queried via ``is_satisfied`` on each
-    ``Session.update`` tick. ``next`` advances any internal state used by
-    variable schedules after a reinforcer is delivered.
-    """
-
-    def is_satisfied(self, observation: Observation) -> bool:
-        """Return ``True`` if the schedule is currently ready to reinforce."""
-        ...
-
-    def next(self) -> None:
-        """Advance to the next target (for variable schedules)."""
-        ...
-
-
-@runtime_checkable
-class ConcurrentSchedule(Protocol):
-    """Multi-component schedule addressed by operandum index.
-
-    Implementations expose ``n_components`` and a ``which_satisfied`` query
-    that returns the index of a component ready to reinforce, or ``None``.
-    """
-
-    @property
-    def n_components(self) -> int:
-        """Number of operanda / concurrent components."""
-        ...
-
-    def which_satisfied(self, observation: Observation) -> int | None:
-        """Return the index of a satisfied component, or ``None``."""
-        ...
-
-    def note_response_on(self, operandum: int, timestamp: float) -> None:
-        """Notify the schedule that a response occurred on ``operandum``.
-
-        Named distinctly from any future single-component ``note_response``
-        hook so a single class can satisfy both :class:`Schedule` and
-        :class:`ConcurrentSchedule` without signature collision.
-        """
-        ...
-
-    def next(self) -> None:
-        """Advance to the next target after a reinforcer is delivered."""
-        ...
+__all__ = ["Schedule"]

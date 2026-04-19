@@ -1,39 +1,34 @@
-"""Tests for the :class:`Schedule` and :class:`ConcurrentSchedule` Protocols."""
+"""Tests for the :class:`Schedule` alias into ``contingency``."""
+
+from __future__ import annotations
 
 import pytest
+from contingency import Schedule as ContingencySchedule
+from contingency import ScheduleBuilder
 
-from experiment_core import ConcurrentSchedule, Observation, Schedule
-
-from ._fakes import FakeConcurrent, FakeFR
+from experiment_core import Schedule
 
 
 @pytest.mark.unit
-def test_fake_fr_conforms_to_schedule_protocol() -> None:
-    sched = FakeFR(target=3)
+def test_schedule_is_contingency_schedule_alias() -> None:
+    """``experiment_core.Schedule`` is the same class as ``contingency.Schedule``."""
+    assert Schedule is ContingencySchedule
+
+
+@pytest.mark.unit
+def test_builder_fr_is_instance_of_schedule() -> None:
+    sched = ScheduleBuilder.fr(1)
     assert isinstance(sched, Schedule)
 
 
 @pytest.mark.unit
-def test_fake_fr_is_satisfied_semantics() -> None:
-    sched = FakeFR(target=3)
-    obs = Observation(responses_since_last_reinforcement=2)
-    assert sched.is_satisfied(obs) is False
-    obs = Observation(responses_since_last_reinforcement=3)
-    assert sched.is_satisfied(obs) is True
+def test_builder_concurrent_is_instance_of_schedule() -> None:
+    sched = ScheduleBuilder.concurrent({"a": ScheduleBuilder.fr(1), "b": ScheduleBuilder.fr(1)})
+    assert isinstance(sched, Schedule)
 
 
 @pytest.mark.unit
-def test_fake_concurrent_conforms_to_concurrent_protocol() -> None:
-    sched = FakeConcurrent(targets=[1, 2])
-    assert isinstance(sched, ConcurrentSchedule)
-
-
-@pytest.mark.unit
-def test_fake_concurrent_which_satisfied() -> None:
-    sched = FakeConcurrent(targets=[2, 3])
-    obs = Observation(component_responses=[1, 0])
-    assert sched.which_satisfied(obs) is None
-    obs = Observation(component_responses=[2, 0])
-    assert sched.which_satisfied(obs) == 0
-    obs = Observation(component_responses=[0, 3])
-    assert sched.which_satisfied(obs) == 1
+def test_concurrent_schedule_is_no_longer_exported() -> None:
+    """``ConcurrentSchedule`` was removed from the public API."""
+    with pytest.raises(ImportError):
+        exec("from experiment_core import ConcurrentSchedule")

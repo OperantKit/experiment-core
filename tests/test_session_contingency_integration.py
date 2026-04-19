@@ -81,3 +81,62 @@ def test_contingency_schedule_not_called_after_end_reinforcement() -> None:
     session.end_reinforcement(timestamp=1.1)
     session.update(timestamp=2.0, total_responses=2)
     assert session.state == SessionState.REINFORCING
+
+
+@pytest.mark.integration
+def test_session_drives_contingency_concurrent_fr1_fr2() -> None:
+    """contingency.Concurrent({left: FR(1), right: FR(2)}) via handle_response_on."""
+    schedule = ScheduleBuilder.concurrent(
+        {
+            "left": ScheduleBuilder.fr(1),
+            "right": ScheduleBuilder.fr(2),
+        }
+    )
+    session = Session(schedule=schedule)
+    session.start(timestamp=0.0)
+
+    # One response on operandum 0 (left, FR1) should reinforce.
+    session.handle_response_on(operandum=0, timestamp=0.5)
+    assert session.state == SessionState.REINFORCING
+    start_events = [e for e in session.events if isinstance(e, ReinforcerStartEvent)]
+    assert len(start_events) == 1
+    assert start_events[0].operandum == 0
+
+    session.end_reinforcement(timestamp=0.6)
+    assert session.state == SessionState.RUNNING
+
+    # First response on operandum 1 (right, FR2) should NOT reinforce.
+    session.handle_response_on(operandum=1, timestamp=1.0)
+    assert session.state == SessionState.RUNNING
+
+    # Second response on operandum 1 reinforces.
+    session.handle_response_on(operandum=1, timestamp=1.5)
+    assert session.state == SessionState.REINFORCING
+    start_events = [e for e in session.events if isinstance(e, ReinforcerStartEvent)]
+    assert len(start_events) == 2
+    assert start_events[-1].operandum == 1
+
+
+@pytest.mark.integration
+def test_contingency_concurrent_rejects_out_of_range_operandum() -> None:
+    schedule = ScheduleBuilder.concurrent(
+        {
+            "a": ScheduleBuilder.fr(1),
+            "b": ScheduleBuilder.fr(1),
+        }
+    )
+    session = Session(schedule=schedule)
+    session.start(timestamp=0.0)
+
+    with pytest.raises(IndexError):
+        session.handle_response_on(operandum=5, timestamp=1.0)
+
+
+@pytest.mark.integration
+def test_contingency_concurrent_handle_response_on_raises_for_single_component() -> None:
+    """handle_response_on is only valid for concurrent schedules."""
+    session = Session(schedule=ScheduleBuilder.fr(1))
+    session.start(timestamp=0.0)
+
+    with pytest.raises(ValueError):
+        session.handle_response_on(operandum=0, timestamp=1.0)

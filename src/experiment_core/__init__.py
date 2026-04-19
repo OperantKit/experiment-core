@@ -19,7 +19,7 @@ from .events import (
 )
 from .exit_condition import ExitCondition, ReinforcementCountExit, TimeLimitExit
 from .observation import Observation
-from .protocols import ConcurrentSchedule, Schedule
+from .protocols import Schedule
 from .renewal import (
     ContextualSession,
     PhaseRecord,
@@ -51,7 +51,6 @@ __all__ = [
     "ReinforcementCountExit",
     "TimeLimitExit",
     "Schedule",
-    "ConcurrentSchedule",
     "RenewalParadigm",
     "ContextualSession",
     "RenewalExperiment",
