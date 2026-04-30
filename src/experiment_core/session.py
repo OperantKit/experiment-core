@@ -7,6 +7,8 @@ All time values are canonical seconds (float). ``Session`` drives
 
 from __future__ import annotations
 
+from bisect import bisect_left, bisect_right
+
 from contingency.entities import ResponseEvent as _CResponseEvent
 
 from .delay import DelayFunction
@@ -67,6 +69,9 @@ class Session:
         self.reinforcement_count: int = 0
         self._last_reinforcement_responses: int = 0
         self.reinforcement_history: list[tuple[float, float]] = []
+        self._reinforcer_events: list[ReinforcerStartEvent] = []
+        self._reinforcer_event_timestamps: list[float] = []
+        self._pending_reinforcer_event: ReinforcerStartEvent | None = None
         self.start_time: float | None = None
         self._last_reinforcement_time: float = 0.0
 
@@ -154,11 +159,12 @@ class Session:
                 if delay_duration < 0:
                     delay_duration = 0.0
                 potency = self.delay_function.calculate_potency(delay_duration, is_signaled=False)
-                for evt in reversed(self.events):
-                    if isinstance(evt, ReinforcerStartEvent):
-                        evt.timestamp = timestamp
-                        evt.potency = potency
-                        break
+                pending = self._pending_reinforcer_event
+                if pending is not None:
+                    pending.timestamp = timestamp
+                    pending.potency = potency
+                    if self._reinforcer_event_timestamps:
+                        self._reinforcer_event_timestamps[-1] = timestamp
                 if self.reinforcement_history:
                     count = self.reinforcement_history[-1][1]
                     self.reinforcement_history[-1] = (timestamp, count)
@@ -227,15 +233,27 @@ class Session:
         self.reinforcement_count += 1
         self.reinforcement_history.append((timestamp, self.reinforcement_count))
         self._last_reinforced_operandum = operandum
-        self.events.append(
-            ReinforcerStartEvent(
-                self.reinforcement_count,
-                timestamp,
-                operandum=operandum,
-                potency=potency,
-            )
+        start_event = ReinforcerStartEvent(
+            self.reinforcement_count,
+            timestamp,
+            operandum=operandum,
+            potency=potency,
         )
+        self._append_reinforcer_start(start_event)
         self._transition_to(SessionState.REINFORCING, timestamp)
+
+    def _append_reinforcer_start(self, event: ReinforcerStartEvent) -> None:
+        """Atomically append a ReinforcerStartEvent across all indexed lists.
+
+        All three structures — ``events``, ``_reinforcer_events``, and
+        ``_reinforcer_event_timestamps`` — must stay in lockstep so that
+        windowed rate queries remain consistent. Route all appends of a
+        ReinforcerStartEvent through here.
+        """
+        self.events.append(event)
+        self._reinforcer_events.append(event)
+        self._reinforcer_event_timestamps.append(event.timestamp)
+        self._pending_reinforcer_event = event
 
     def end_reinforcement(self, timestamp: float) -> None:
         """Conclude the current reinforcer delivery and return to RUNNING."""
@@ -251,6 +269,7 @@ class Session:
                 self._last_reinforcement_responses_per[op] = self._component_responses[op]
             self._last_reinforced_operandum = None
             self._pending_trigger_timestamp = None
+            self._pending_reinforcer_event = None
             self._transition_to(SessionState.RUNNING, timestamp)
             # Re-evaluate the exit condition immediately so callers do not
             # need to issue an extra response/tick to discover that the
@@ -268,13 +287,21 @@ class Session:
         if self.start_time is None or not self.reinforcement_history:
             return 0.0
 
-        relevant_history = self.reinforcement_history
+        # reinforcement_history is append-sorted ascending by timestamp.
+        # Clamp the upper bound to current_time symmetrically with the
+        # effective-rate path (a refined pending reinforcer could sit past
+        # current_time; we don't want to count it here).
+        hi = bisect_right(
+            self.reinforcement_history, (current_time, float("inf"))
+        )
         if window:
-            relevant_history = [
-                h for h in self.reinforcement_history if current_time - h[0] <= window
-            ]
+            cutoff = current_time - window
+            lo = bisect_left(self.reinforcement_history, (cutoff, float("-inf")))
+        else:
+            lo = 0
+        count = hi - lo
 
-        if not relevant_history:
+        if count == 0:
             return 0.0
 
         duration_sec = current_time - max(
@@ -284,7 +311,6 @@ class Session:
         if duration_sec <= 0:
             return 0.0
 
-        count = len(relevant_history)
         return (count / duration_sec) * 60.0
 
     def get_behavioral_momentum(self, current_time: float, sensitivity: float = 1.0) -> float:
@@ -306,25 +332,30 @@ class Session:
 
         Each reinforcer's contribution is weighted by its potency.
         """
-        if self.start_time is None or not self.events:
+        if self.start_time is None or not self._reinforcer_events:
             return 0.0
 
-        relevant_reinforcers: list[ReinforcerStartEvent] = []
-        for event in self.events:
-            if isinstance(event, ReinforcerStartEvent):
-                if window is None or (current_time - window <= event.timestamp <= current_time):
-                    relevant_reinforcers.append(event)
+        timestamps = self._reinforcer_event_timestamps
+        events = self._reinforcer_events
 
-        if not relevant_reinforcers:
+        if window is not None:
+            cutoff = current_time - window
+            lo = bisect_left(timestamps, cutoff)
+            hi = bisect_right(timestamps, current_time, lo=lo)
+            relevant = events[lo:hi]
+        else:
+            relevant = events
+
+        if not relevant:
             return 0.0
 
-        effective_reinforcement_count = sum(event.potency for event in relevant_reinforcers)
+        effective_reinforcement_count = sum(event.potency for event in relevant)
 
         if window:
             duration_sec = window
         else:
-            min_event_time = min(e.timestamp for e in relevant_reinforcers)
-            duration_sec = current_time - min(self.start_time, min_event_time)
+            # events are append-sorted; first element has the minimum timestamp.
+            duration_sec = current_time - min(self.start_time, timestamps[0])
 
         if duration_sec <= 0:
             return 0.0

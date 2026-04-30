@@ -12,8 +12,11 @@ ABS_TOL = 1e-9
 
 def _inject_reinforcer(session: Session, timestamp: float, potency: float, rid: int) -> None:
     """Append a synthetic ReinforcerStartEvent + history tuple for rate tests."""
-    session.events.append(ReinforcerStartEvent(id=rid, timestamp=timestamp, potency=potency))
+    evt = ReinforcerStartEvent(id=rid, timestamp=timestamp, potency=potency)
+    session.events.append(evt)
     session.reinforcement_history.append((timestamp, rid))
+    session._reinforcer_events.append(evt)
+    session._reinforcer_event_timestamps.append(timestamp)
 
 
 @pytest.mark.unit
