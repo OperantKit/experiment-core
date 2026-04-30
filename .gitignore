@@ -19,3 +19,5 @@ htmlcov/
 
 # Package-local scratch / planning / draft / review traces (see .claude/rules/common/local-scratch-and-privacy.md)
 .local/
+.venv-fresh/
+*.py[cod]
