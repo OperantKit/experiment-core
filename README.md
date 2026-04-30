@@ -18,7 +18,7 @@ Session lifecycle management, experimental context (Bouton's background stimuli)
 ## Not responsibilities
 
 - Schedule algorithms themselves (live in `contingency` / `contingency-py`).
-- Stimulus metadata (lives in `contingency-annotator`).
+- Stimulus metadata (lives in `contingency-dsl-py`).
 - Event persistence / JSONL logging (lives in `session-recorder`).
 - UI, hardware bridging (live in `experiment-io`, `operantkit-frontend`).
 
@@ -38,7 +38,7 @@ Session lifecycle management, experimental context (Bouton's background stimuli)
                 ┌─────────────────────┼──────────────────────┐
                 ▼                     ▼                      ▼
     Schedule runtime      contingency-dsl-py AST    stimulus metadata
-    (contingency, ext.)   (program → runtime)       (contingency-annotator)
+    (contingency, ext.)   (program → runtime)       (contingency-dsl-py)
 ```
 
 The Schedule interface is declared locally as a `Protocol` (duck-typed) so this package compiles and tests without a hard dependency on the concrete schedule-runtime package. Integration with `contingency-py` happens when the concrete runtime lands in `apps/core/contingency-py/`.
@@ -81,7 +81,7 @@ Explicit non-goals (belong to other packages or the next design round):
 - Experiment protocol loader (YAML/JSON → runtime graph) and `ExperimentCore` façade — deferred to a higher-level orchestrator package. The v0 `ExperimentCore` / `ExecutionEnvironmentAdapter` / `DataManager` abstractions are **not ported**; they were scaffolding for a simulator-oriented v0 workflow and do not fit the Protocol-boundary model adopted here.
 - Persistence / JSONL logging — `session-recorder` consumes `SessionEvent` via :class:`EventSink`.
 - Concrete reinforcement schedules — `contingency-py` (future) implements the `Schedule` Protocol.
-- Stimulus / reinforcer metadata — `contingency-annotator`.
+- Stimulus / reinforcer metadata — `contingency-dsl-py`.
 - Hardware I/O — `experiment-io`.
 
 ## References

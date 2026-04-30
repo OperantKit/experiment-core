@@ -18,7 +18,7 @@ operantkit のための実験オーケストレーション・コア。
 ## 責務外
 
 - スケジュール・アルゴリズム自体（`contingency` / `contingency-py` にある）。
-- 刺激メタデータ（`contingency-annotator` にある）。
+- 刺激メタデータ（`contingency-dsl-py` にある）。
 - イベント永続化 / JSONL ロギング（`session-recorder` にある）。
 - UI、ハードウェア・ブリッジ（`experiment-io`、`operantkit-frontend` にある）。
 
@@ -38,7 +38,7 @@ operantkit のための実験オーケストレーション・コア。
                 ┌─────────────────────┼──────────────────────┐
                 ▼                     ▼                      ▼
     スケジュール・ランタイム   contingency-dsl-py AST    刺激メタデータ
-    (contingency, ext.)       (program → runtime)       (contingency-annotator)
+    (contingency, ext.)       (program → runtime)       (contingency-dsl-py)
 ```
 
 Schedule インターフェースは `Protocol`（duck-typed）としてローカルに宣言されている。これにより本パッケージは具象スケジュール・ランタイム・パッケージへのハード依存なしにコンパイルとテストができる。`contingency-py` との統合は `apps/core/contingency-py/` に具象ランタイムが登場したときに行われる。
@@ -81,7 +81,7 @@ mise exec -- .venv/bin/python -m pip install -e '.[dev]'
 - 実験プロトコル・ローダ (YAML/JSON → ランタイム・グラフ) と `ExperimentCore` ファサード — 上位のオーケストレータ・パッケージへ延期。v0 の `ExperimentCore` / `ExecutionEnvironmentAdapter` / `DataManager` 抽象化は **移植されていない**; これらは simulator 指向の v0 ワークフロー用のスキャフォールドで、ここで採用された Protocol 境界モデルに合わない。
 - 永続化 / JSONL ロギング — `session-recorder` が `SessionEvent` を :class:`EventSink` 経由で消費する。
 - 具象強化スケジュール — `contingency-py`（将来）が `Schedule` Protocol を実装する。
-- 刺激 / 強化子メタデータ — `contingency-annotator`。
+- 刺激 / 強化子メタデータ — `contingency-dsl-py`。
 - ハードウェア I/O — `experiment-io`。
 
 ## 参考文献
