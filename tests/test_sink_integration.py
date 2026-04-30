@@ -14,9 +14,11 @@ import pytest
 from contingency import ScheduleBuilder
 
 from experiment_core import (
+    ComponentChangeEvent,
     Observation,
     ReinforcerEndEvent,
     ReinforcerStartEvent,
+    ResponseEvent,
     Session,
     SessionState,
     StateChangeEvent,
@@ -61,6 +63,30 @@ def test_event_to_dict_roundtrips_via_json() -> None:
 def test_event_to_dict_rejects_non_dataclass() -> None:
     with pytest.raises(TypeError):
         event_to_dict("not an event")  # type: ignore[arg-type]
+
+
+@pytest.mark.unit
+def test_event_to_dict_roundtrips_component_change_event() -> None:
+    evt = ComponentChangeEvent(from_component="ICI", to_component="C1", timestamp=60.014)
+    payload = json.dumps(event_to_dict(evt))
+    restored = json.loads(payload)
+    assert restored == {
+        "from_component": "ICI",
+        "to_component": "C1",
+        "timestamp": 60.014,
+    }
+
+
+@pytest.mark.unit
+def test_event_to_dict_roundtrips_response_event_with_operandum() -> None:
+    evt = ResponseEvent(id=42, timestamp=2.5, operandum=1)
+    payload = json.dumps(event_to_dict(evt))
+    restored = json.loads(payload)
+    assert restored == {
+        "id": 42,
+        "timestamp": 2.5,
+        "operandum": 1,
+    }
 
 
 @pytest.mark.integration

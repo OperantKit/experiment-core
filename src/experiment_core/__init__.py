@@ -10,10 +10,12 @@ from .clock import Clock, RealtimeClock, VirtualClock
 from .context import ExperimentContext
 from .delay import DelayFunction
 from .events import (
+    ComponentChangeEvent,
     ReinforcerEndEvent,
     ReinforcerStartEvent,
     ResponseEvent,
     SessionEvent,
+    SessionMeta,
     SessionState,
     StateChangeEvent,
 )
@@ -44,7 +46,9 @@ __all__ = [
     "ReinforcerStartEvent",
     "ReinforcerEndEvent",
     "StateChangeEvent",
+    "ComponentChangeEvent",
     "SessionEvent",
+    "SessionMeta",
     "Observation",
     "DelayFunction",
     "ExitCondition",
