@@ -1,7 +1,7 @@
 """End-to-end integration tests: Session → events → EventSink → JSON.
 
 Confirms that experiment-core events flow cleanly through the downstream
-persistence boundary that session-recorder and behavior-scope will
+persistence boundary that session-recorder and session-visualizer
 implement. Uses only experiment-core's own types — no hard dependency
 on session-recorder.
 """

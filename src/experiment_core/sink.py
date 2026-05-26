@@ -3,8 +3,8 @@
 experiment-core owns the event *types* (:mod:`experiment_core.events`)
 but delegates *persistence* to downstream packages:
 
-- ``session-recorder`` writes events to JSONL
-- ``behavior-scope`` streams them to a dashboard
+- ``session-recorder`` writes events to OKL v1
+- ``session-visualizer`` streams them to a dashboard (live SSE)
 - tests and simulators typically want an in-memory capture
 
 This module defines the narrow Protocol that all sinks must satisfy,
