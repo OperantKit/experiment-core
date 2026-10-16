@@ -56,6 +56,44 @@ mise exec -- python -m venv .venv
 mise exec -- .venv/bin/python -m pip install -e '.[dev]'
 ```
 
+## 30 秒で動く例
+
+[contingency-dsl](https://github.com/OperantKit/contingency-dsl) からスケジュールをコンパイルし、強化子 2 回で終わるセッションとして動かし、イベント記録を読む:
+
+```python
+from contingency_dsl import parse
+from contingency import from_dsl
+from experiment_core import ReinforcementCountExit, Session, SessionState, StateChangeEvent
+
+session = Session(from_dsl(parse("FR 3")), exit_condition=ReinforcementCountExit(count=2))
+session.start(0.0)
+responses = 0
+for t in range(1, 11):  # 1 秒に 1 反応
+    if session.state is SessionState.REINFORCING:
+        session.end_reinforcement(float(t))  # 1 秒間の強化子提示を終える
+        continue
+    responses += 1
+    session.update(float(t), responses)
+
+print(session.state.name, session.reinforcement_count)  # FINISHED 2
+print([(type(e).__name__, e.timestamp) for e in session.events if not isinstance(e, StateChangeEvent)])
+# [('ReinforcerStartEvent', 3.0), ('ReinforcerEndEvent', 4.0),
+#  ('ReinforcerStartEvent', 7.0), ('ReinforcerEndEvent', 8.0)]
+```
+
+`contingency-py` と `contingency-dsl-py` は依存として一緒に入る。同じイベントをファイルやダッシュボードに送るには、[session-runner](https://github.com/OperantKit/session-runner)（`pip install session-runner`）でセッションを駆動する。
+
+## 自作の 50 行のセッションループでは足りない理由
+
+スケジュールに「強化か否か」だけを問うループは、セッションのデータが依存する次の点を落とす:
+
+- **強化子の提示は区間である.** `Session` は `ReinforcerStartEvent` とともに `REINFORCING` に入り、`end_reinforcement` が呼ばれると `ReinforcerEndEvent` とともに出る。その間スケジュールは進めない。
+- **終了条件.** `ReinforcementCountExit` と `TimeLimitExit` を更新のたびに検査し、`FINISHED` への `StateChangeEvent` でセッションを終える。
+- **強化遅延.** 各 `ReinforcerStartEvent` は、きっかけとなった反応から提示までの遅延に基づく `potency` を記録する（`DelayFunction`、`exp(-k * delay)`。遅延中に信号があると `k` が小さくなる）。
+- **並立スケジュールのオペランダム.** `handle_response_on(index, timestamp)` は反応を `Conc(...)` の 1 成分に渡し、オペランダムごとの反応数を保持する。
+- **文脈と復活.** `ExperimentContext` は文脈をコサイン類似度で比較する。`RenewalExperiment` と `renewal_index` は ABA・AAB・ABC の復活の実験計画を扱う。
+- **イベントはデータ.** すべてのイベントは dataclass で、`event_to_dict` で JSON にできる辞書になり、`emit(event)` を持つ任意のオブジェクトが受け取れる。
+
 ## 開発
 
 ```bash

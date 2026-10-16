@@ -56,6 +56,44 @@ mise exec -- python -m venv .venv
 mise exec -- .venv/bin/python -m pip install -e '.[dev]'
 ```
 
+## 30-second example
+
+Compile a schedule from [contingency-dsl](https://github.com/OperantKit/contingency-dsl), run it as a session that ends after two reinforcers, and read the event log:
+
+```python
+from contingency_dsl import parse
+from contingency import from_dsl
+from experiment_core import ReinforcementCountExit, Session, SessionState, StateChangeEvent
+
+session = Session(from_dsl(parse("FR 3")), exit_condition=ReinforcementCountExit(count=2))
+session.start(0.0)
+responses = 0
+for t in range(1, 11):  # one response per second
+    if session.state is SessionState.REINFORCING:
+        session.end_reinforcement(float(t))  # 1-s reinforcer access ends
+        continue
+    responses += 1
+    session.update(float(t), responses)
+
+print(session.state.name, session.reinforcement_count)  # FINISHED 2
+print([(type(e).__name__, e.timestamp) for e in session.events if not isinstance(e, StateChangeEvent)])
+# [('ReinforcerStartEvent', 3.0), ('ReinforcerEndEvent', 4.0),
+#  ('ReinforcerStartEvent', 7.0), ('ReinforcerEndEvent', 8.0)]
+```
+
+`contingency-py` and `contingency-dsl-py` are installed as dependencies. To forward the same events to a file or a dashboard, drive the session with [session-runner](https://github.com/OperantKit/session-runner) (`pip install session-runner`).
+
+## Why not a 50-line hand-written session loop?
+
+A loop that only asks the schedule "reinforced or not?" leaves out what the session data depend on:
+
+- **Reinforcer delivery is an interval.** `Session` enters `REINFORCING` with a `ReinforcerStartEvent` and leaves it with a `ReinforcerEndEvent` when `end_reinforcement` is called; the schedule is not stepped in between.
+- **Exit conditions.** `ReinforcementCountExit` and `TimeLimitExit` are checked on every update and end the session with a `StateChangeEvent` to `FINISHED`.
+- **Delay of reinforcement.** Each `ReinforcerStartEvent` records a `potency` from the delay between the triggering response and delivery (`DelayFunction`, `exp(-k * delay)`, with a smaller `k` when the delay is signaled).
+- **Concurrent operanda.** `handle_response_on(index, timestamp)` routes a response to one component of a `Conc(...)` schedule and keeps per-operandum counts.
+- **Context and renewal.** `ExperimentContext` compares contexts by cosine similarity; `RenewalExperiment` and `renewal_index` cover ABA, AAB, and ABC renewal designs.
+- **Events are data.** Every event is a dataclass; `event_to_dict` gives a JSON-ready dict and any object with `emit(event)` can receive them.
+
 ## Development
 
 ```bash
