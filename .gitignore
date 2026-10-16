@@ -21,3 +21,6 @@ htmlcov/
 .local/
 .venv-fresh/
 *.py[cod]
+
+# hatch-vcs generated
+src/experiment_core/_version.py

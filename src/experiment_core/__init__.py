@@ -33,7 +33,10 @@ from .renewal import (
 from .session import Session
 from .sink import EventSink, InMemorySink, event_to_dict
 
-__version__ = "0.1.0a0"
+try:
+    from experiment_core._version import __version__
+except ImportError:
+    __version__ = "0.0.0+unknown"
 
 __all__ = [
     "Clock",
