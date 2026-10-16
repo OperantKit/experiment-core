@@ -1,10 +1,9 @@
 """Integration tests: drive :class:`Session` with real ``contingency`` schedules.
 
-Verifies that the SCOPE-aligned dispatch path (``schedule.step(now, event)``)
-produces the same reinforcement accounting as the legacy
-``is_satisfied`` path. Uses ``contingency.ScheduleBuilder`` to build
-concrete FR / VR / CRF schedules and drives them through
-:class:`experiment_core.Session`.
+Verifies that :class:`experiment_core.Session` produces the expected
+reinforcement accounting when it drives schedules through
+``schedule.step(now, event)``. Uses ``contingency.ScheduleBuilder`` to build
+concrete FR / CRF / concurrent schedules.
 """
 
 from __future__ import annotations
@@ -70,10 +69,10 @@ def test_session_drives_real_contingency_crf_exit_condition() -> None:
 
 @pytest.mark.integration
 def test_contingency_schedule_not_called_after_end_reinforcement() -> None:
-    """The legacy ``schedule.next()`` call is skipped for contingency schedules.
+    """Session advances the schedule only through ``step``.
 
-    ``contingency.FR`` does not expose ``next()``; if experiment-core
-    mis-dispatches this would raise ``AttributeError``.
+    ``contingency.FR`` does not expose ``next()``; if ``end_reinforcement``
+    called it, this test would raise ``AttributeError``.
     """
     session = Session(schedule=ScheduleBuilder.fr(1))
     session.start(timestamp=0.0)

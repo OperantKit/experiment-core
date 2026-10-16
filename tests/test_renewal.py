@@ -11,17 +11,6 @@ from experiment_core.renewal import (
     renewal_index,
 )
 
-
-def FakeFR(target: int):  # noqa: N802 - keep legacy call sites unchanged
-    """Shim returning a real ``contingency`` FR(target) schedule."""
-    return ScheduleBuilder.fr(target)
-
-
-def FakeExtinction():  # noqa: N802 - keep legacy call sites unchanged
-    """Shim returning a real ``contingency`` extinction schedule."""
-    return ScheduleBuilder.ext()
-
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -89,22 +78,22 @@ class TestRenewalIndex:
 
 class TestContextualSessionInit:
     def test_initial_context_stored(self, ctx_a):
-        s = ContextualSession(FakeFR(5), initial_context=ctx_a)
+        s = ContextualSession(ScheduleBuilder.fr(5), initial_context=ctx_a)
         assert s.current_context == ctx_a
 
     def test_phase_log_empty_on_init(self, ctx_a):
-        s = ContextualSession(FakeFR(5), initial_context=ctx_a)
+        s = ContextualSession(ScheduleBuilder.fr(5), initial_context=ctx_a)
         assert s.phase_log == []
 
 
 class TestContextualSessionSwitchContext:
     def test_switch_updates_current_context(self, ctx_a, ctx_b):
-        s = ContextualSession(FakeFR(5), initial_context=ctx_a)
+        s = ContextualSession(ScheduleBuilder.fr(5), initial_context=ctx_a)
         s.switch_context(ctx_b)
         assert s.current_context == ctx_b
 
     def test_switch_appends_phase_record(self, ctx_a, ctx_b):
-        s = ContextualSession(FakeFR(5), initial_context=ctx_a)
+        s = ContextualSession(ScheduleBuilder.fr(5), initial_context=ctx_a)
         s.switch_context(ctx_b, timestamp=10.0)
         assert len(s.phase_log) == 1
         record = s.phase_log[0]
@@ -112,7 +101,7 @@ class TestContextualSessionSwitchContext:
         assert record.switched_at == pytest.approx(10.0)
 
     def test_multiple_switches_accumulate_in_log(self, ctx_a, ctx_b, ctx_c):
-        s = ContextualSession(FakeFR(5), initial_context=ctx_a)
+        s = ContextualSession(ScheduleBuilder.fr(5), initial_context=ctx_a)
         s.switch_context(ctx_b, timestamp=5.0)
         s.switch_context(ctx_c, timestamp=10.0)
         assert len(s.phase_log) == 2
@@ -122,22 +111,22 @@ class TestContextualSessionSwitchContext:
 
 class TestContextualSessionRenewalIndex:
     def test_delegates_to_renewal_index_function(self, ctx_a, ctx_b):
-        s = ContextualSession(FakeFR(5), initial_context=ctx_a)
+        s = ContextualSession(ScheduleBuilder.fr(5), initial_context=ctx_a)
         expected = renewal_index(ctx_a, ctx_b, ctx_a)
         assert s.renewal_index(ctx_a, ctx_b, ctx_a) == pytest.approx(expected)
 
     def test_aba_positive(self, ctx_a, ctx_b):
-        s = ContextualSession(FakeFR(5), initial_context=ctx_a)
+        s = ContextualSession(ScheduleBuilder.fr(5), initial_context=ctx_a)
         assert s.renewal_index(ctx_a, ctx_b, ctx_a) > 0.0
 
     def test_aab_zero(self, ctx_a, ctx_b):
-        s = ContextualSession(FakeFR(5), initial_context=ctx_a)
+        s = ContextualSession(ScheduleBuilder.fr(5), initial_context=ctx_a)
         assert s.renewal_index(ctx_a, ctx_a, ctx_b) == pytest.approx(0.0)
 
 
 class TestContextualSessionInheritsSession:
     def test_can_start_and_update(self, ctx_a):
-        s = ContextualSession(FakeFR(2), initial_context=ctx_a)
+        s = ContextualSession(ScheduleBuilder.fr(2), initial_context=ctx_a)
         s.start(0.0)
         s.update(1.0, 1)
         s.update(2.0, 2)
@@ -215,7 +204,7 @@ class TestRenewalExperimentRunPhase:
             paradigm=RenewalParadigm.ABA,
             contexts={"A": ctx_a, "B": ctx_b},
         )
-        result = exp.run_phase("acquisition", "A", FakeFR(5), n_responses=20)
+        result = exp.run_phase("acquisition", "A", ScheduleBuilder.fr(5), n_responses=20)
         assert isinstance(result, PhaseResult)
         assert result.phase == "acquisition"
         assert result.context == ctx_a
@@ -225,7 +214,7 @@ class TestRenewalExperimentRunPhase:
             paradigm=RenewalParadigm.ABA,
             contexts={"A": ctx_a, "B": ctx_b},
         )
-        result = exp.run_phase("acquisition", "A", FakeFR(5), n_responses=15)
+        result = exp.run_phase("acquisition", "A", ScheduleBuilder.fr(5), n_responses=15)
         assert result.n_reinforcements == 3
         assert result.n_responses == 15
 
@@ -234,7 +223,7 @@ class TestRenewalExperimentRunPhase:
             paradigm=RenewalParadigm.ABA,
             contexts={"A": ctx_a, "B": ctx_b},
         )
-        result = exp.run_phase("extinction", "B", FakeExtinction(), n_responses=20)
+        result = exp.run_phase("extinction", "B", ScheduleBuilder.ext(), n_responses=20)
         assert result.n_reinforcements == 0
 
     def test_run_phase_updates_session_context(self, ctx_a, ctx_b):
@@ -242,7 +231,7 @@ class TestRenewalExperimentRunPhase:
             paradigm=RenewalParadigm.ABA,
             contexts={"A": ctx_a, "B": ctx_b},
         )
-        exp.run_phase("acquisition", "A", FakeFR(5), n_responses=5)
-        exp.run_phase("extinction", "B", FakeExtinction(), n_responses=5)
+        exp.run_phase("acquisition", "A", ScheduleBuilder.fr(5), n_responses=5)
+        exp.run_phase("extinction", "B", ScheduleBuilder.ext(), n_responses=5)
         assert exp.session is not None
         assert exp.session.current_context == ctx_b

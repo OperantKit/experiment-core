@@ -41,9 +41,15 @@ Session lifecycle management, experimental context (Bouton's background stimuli)
     (contingency, ext.)   (program → runtime)       (contingency-dsl-py)
 ```
 
-The Schedule interface is declared locally as a `Protocol` (duck-typed) so this package compiles and tests without a hard dependency on the concrete schedule-runtime package. Integration with `contingency-py` happens when the concrete runtime lands in `apps/core/contingency-py/`.
+`experiment_core.Schedule` is an alias of `contingency.Schedule`; this package does not declare its own schedule interface. `Session` drives schedules through `step(now, event)` and `reset()`. Concurrent schedules are `contingency.Concurrent` instances whose `components` keys name the operanda; `Session.handle_response_on(index, timestamp)` maps an integer operandum index to the matching component key.
 
 ## Installation
+
+```bash
+pip install experiment-core
+```
+
+For development:
 
 ```bash
 mise exec -- python -m venv .venv
@@ -72,7 +78,7 @@ This package owns:
 | `exit_condition` | `ExitCondition`, `ReinforcementCountExit`, `TimeLimitExit` |
 | `observation` | `Observation` |
 | `delay` | `DelayFunction` |
-| `protocols` | `Schedule`, `ConcurrentSchedule` |
+| `protocols` | `Schedule` (alias of `contingency.Schedule`) |
 | `clock` | `Clock`, `VirtualClock`, `RealtimeClock` |
 | `sink` | `EventSink`, `InMemorySink`, `event_to_dict` |
 
@@ -80,7 +86,7 @@ Explicit non-goals (belong to other packages or the next design round):
 
 - Experiment protocol loader (YAML/JSON → runtime graph) and `ExperimentCore` façade — deferred to a higher-level orchestrator package. The v0 `ExperimentCore` / `ExecutionEnvironmentAdapter` / `DataManager` abstractions are **not ported**; they were scaffolding for a simulator-oriented v0 workflow and do not fit the Protocol-boundary model adopted here.
 - Persistence / JSONL logging — `session-recorder` consumes `SessionEvent` via :class:`EventSink`.
-- Concrete reinforcement schedules — `contingency-py` (future) implements the `Schedule` Protocol.
+- Concrete reinforcement schedules — `contingency-py` (`contingency.ScheduleBuilder`).
 - Stimulus / reinforcer metadata — `contingency-dsl-py`.
 - Hardware I/O — `experiment-io`.
 

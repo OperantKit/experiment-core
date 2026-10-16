@@ -41,9 +41,15 @@ operantkit のための実験オーケストレーション・コア。
     (contingency, ext.)       (program → runtime)       (contingency-dsl-py)
 ```
 
-Schedule インターフェースは `Protocol`（duck-typed）としてローカルに宣言されている。これにより本パッケージは具象スケジュール・ランタイム・パッケージへのハード依存なしにコンパイルとテストができる。`contingency-py` との統合は `apps/core/contingency-py/` に具象ランタイムが登場したときに行われる。
+`experiment_core.Schedule` は `contingency.Schedule` の別名であり、本パッケージは独自のスケジュール・インターフェースを宣言しない。`Session` は `step(now, event)` と `reset()` でスケジュールを駆動する。並立スケジュールは `contingency.Concurrent` のインスタンスで、`components` のキーが各 operandum を表す。`Session.handle_response_on(index, timestamp)` は整数の operandum 番号を対応する component キーに対応づける。
 
 ## インストール
+
+```bash
+pip install experiment-core
+```
+
+開発用:
 
 ```bash
 mise exec -- python -m venv .venv
@@ -72,7 +78,7 @@ mise exec -- .venv/bin/python -m pip install -e '.[dev]'
 | `exit_condition` | `ExitCondition`, `ReinforcementCountExit`, `TimeLimitExit` |
 | `observation` | `Observation` |
 | `delay` | `DelayFunction` |
-| `protocols` | `Schedule`, `ConcurrentSchedule` |
+| `protocols` | `Schedule`（`contingency.Schedule` の別名） |
 | `clock` | `Clock`, `VirtualClock`, `RealtimeClock` |
 | `sink` | `EventSink`, `InMemorySink`, `event_to_dict` |
 
@@ -80,7 +86,7 @@ mise exec -- .venv/bin/python -m pip install -e '.[dev]'
 
 - 実験プロトコル・ローダ (YAML/JSON → ランタイム・グラフ) と `ExperimentCore` ファサード — 上位のオーケストレータ・パッケージへ延期。v0 の `ExperimentCore` / `ExecutionEnvironmentAdapter` / `DataManager` 抽象化は **移植されていない**; これらは simulator 指向の v0 ワークフロー用のスキャフォールドで、ここで採用された Protocol 境界モデルに合わない。
 - 永続化 / JSONL ロギング — `session-recorder` が `SessionEvent` を :class:`EventSink` 経由で消費する。
-- 具象強化スケジュール — `contingency-py`（将来）が `Schedule` Protocol を実装する。
+- 具象強化スケジュール — `contingency-py`（`contingency.ScheduleBuilder`）。
 - 刺激 / 強化子メタデータ — `contingency-dsl-py`。
 - ハードウェア I/O — `experiment-io`。
 
