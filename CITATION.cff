@@ -1,0 +1,9 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using the metadata from this file."
+type: software
+title: "experiment-core"
+authors:
+  - name: "OperantKit contributors"
+repository-code: "https://github.com/OperantKit/experiment-core"
+license: MIT
+abstract: "Experimental orchestration core for operantkit: Session lifecycle, ExperimentContext, Renewal (ABA/AAB/ABC). Drives contingency-py schedules via step/reset; legacy is_satisfied Protocol supported during migration."
