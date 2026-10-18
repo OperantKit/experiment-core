@@ -81,7 +81,7 @@ print([(type(e).__name__, e.timestamp) for e in session.events if not isinstance
 #  ('ReinforcerStartEvent', 7.0), ('ReinforcerEndEvent', 8.0)]
 ```
 
-`contingency-py` と `contingency-dsl-py` は依存として一緒に入る。同じイベントをファイルやダッシュボードに送るには、[session-runner](https://github.com/OperantKit/session-runner)（`pip install session-runner`）でセッションを駆動する。
+`contingency-py` が依存として入り、`contingency-dsl-py` もそれに伴って入る。同じイベントをファイルやダッシュボードに送るには、[session-runner](https://github.com/OperantKit/session-runner)（`pip install session-runner`）でセッションを駆動する。
 
 ## 自作の 50 行のセッションループでは足りない理由
 

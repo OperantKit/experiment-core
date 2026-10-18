@@ -81,7 +81,7 @@ print([(type(e).__name__, e.timestamp) for e in session.events if not isinstance
 #  ('ReinforcerStartEvent', 7.0), ('ReinforcerEndEvent', 8.0)]
 ```
 
-`contingency-py` and `contingency-dsl-py` are installed as dependencies. To forward the same events to a file or a dashboard, drive the session with [session-runner](https://github.com/OperantKit/session-runner) (`pip install session-runner`).
+`contingency-py` is installed as a dependency and brings `contingency-dsl-py` with it. To forward the same events to a file or a dashboard, drive the session with [session-runner](https://github.com/OperantKit/session-runner) (`pip install session-runner`).
 
 ## Why not a 50-line hand-written session loop?
 
