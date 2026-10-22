@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "experiment-core"
 dynamic = ["version"]
-description = "Experimental orchestration core for operantkit: Session lifecycle, ExperimentContext, Renewal (ABA/AAB/ABC). Drives contingency-py schedules via step/reset; legacy is_satisfied Protocol supported during migration."
+description = "Experimental orchestration core for operantkit: Session lifecycle, ExperimentContext, Renewal (ABA/AAB/ABC). Drives contingency-py schedules via step/reset."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { file = "LICENSE" }
