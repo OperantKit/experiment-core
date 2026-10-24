@@ -2,63 +2,28 @@
 
 :gb: [English README](README.md)
 
-operantkit のための実験オーケストレーション・コア。
+experiment-core は、強化スケジュールのまわりにセッションを組み立てます。セッションを始め、反応ごとにスケジュールを進め、強化子を提示しているあいだはセッションを待たせ、終了条件を満たしたらセッションを終え、そのすべてを型の決まったイベントとして記録します。実験文脈と、ABA・AAB・ABC のリニューアルの実験計画のモデルも持ちます。[OperantKit](https://github.com/OperantKit) の中では、スケジュールエンジン [contingency-py](https://github.com/OperantKit/contingency-py) と、セッションを動かす・記録するパッケージ（[session-runner](https://github.com/OperantKit/session-runner)、[session-recorder](https://github.com/OperantKit/session-recorder)）のあいだに位置します。
 
-## 役割
+- **強化子の提示には時間がかかります。** セッションは開始イベントとともに強化中の状態に入り、終了イベントとともにそこを出ます。提示中の反応ではスケジュールは進みません。
+- **終了条件**（強化子の回数、または制限時間）を更新のたびに確かめます。
+- **イベントはすべて素のデータです。** ファイルに書く、表示器に送る、テストで確かめる、のいずれにも使えます。
 
-セッション・ライフサイクル管理、実験コンテキスト（Bouton の背景刺激）、再燃パラダイム (ABA/AAB/ABC)。本パッケージは宣言的な `contingency-dsl` プログラムをライブ・セッションに変換するランタイム・オーケストレータ: 強化子の供給タイミングを決定し、反応イベントを追跡し、コンテキスト依存のフェーズ遷移を管理する。
-
-## 責務
-
-- **Session**: ライフサイクル (IDLE → RUNNING → REINFORCING → FINISHED)、イベントログ、終了条件、並立（複数 operandum）サポート、強化遅延の効力計算。
-- **ExperimentContext**: Bouton スタイルのコンテキスト刺激で、随伴性をゲートまたは変調する（背景手がかり、状況セット）。
-- **Renewal**: ABA/AAB/ABC コンテキスト依存の回復パラダイム (Bouton & Bolles, 1979; Bouton, 2004)。
-- **仮想クロック・フック**: 決定論的な時間源抽象化。シミュレーションがリアルタイム待機をしなくて済む。
-
-## 責務外
-
-- スケジュール・アルゴリズム自体（`contingency` / `contingency-py` にある）。
-- 刺激メタデータ（`contingency-dsl-py` にある）。
-- イベント永続化 / JSONL ロギング（`session-recorder` にある）。
-- UI、ハードウェア・ブリッジ（`experiment-io`、`operantkit-frontend` にある）。
-
-## アーキテクチャ
-
-```
-                         ┌──────────────────────────┐
-                         │     experiment-core      │
-                         │  ┌────────────────────┐  │
-                         │  │ Session            │  │
-                         │  │ ExperimentContext  │  │
-                         │  │ Renewal            │  │
-                         │  └─────────┬──────────┘  │
-                         └────────────┼─────────────┘
-                    依存 (Protocol 経由)
-                                      │
-                ┌─────────────────────┼──────────────────────┐
-                ▼                     ▼                      ▼
-    スケジュール・ランタイム   contingency-dsl-py AST    刺激メタデータ
-    (contingency, ext.)       (program → runtime)       (contingency-dsl-py)
-```
-
-`experiment_core.Schedule` は `contingency.Schedule` の別名であり、本パッケージは独自のスケジュール・インターフェースを宣言しない。`Session` は `step(now, event)` と `reset()` でスケジュールを駆動する。並立スケジュールは `contingency.Concurrent` のインスタンスで、`components` のキーが各 operandum を表す。`Session.handle_response_on(index, timestamp)` は整数の operandum 番号を対応する component キーに対応づける。
+AI のコーディングエージェント向けの案内は [AGENTS.md](AGENTS.md) にあります。
 
 ## インストール
 
-```bash
-pip install experiment-core
-```
-
-開発用:
+Python 3.11 以上が必要です。experiment-core はまだ PyPI に登録されていません。本体と、必要な 2 つのパッケージを、依存の解決をせずに GitHub から入れます。
 
 ```bash
-mise exec -- python -m venv .venv
-mise exec -- .venv/bin/python -m pip install -e '.[dev]'
+G=git+https://github.com/OperantKit
+pip install --no-deps $G/contingency-dsl-py $G/contingency-py $G/experiment-core
 ```
 
-## 30 秒で動く例
+`pip check` はこれらの開発版のあいだの版の不一致を報告しますが、以下の例には影響しません。
 
-[contingency-dsl](https://github.com/OperantKit/contingency-dsl) からスケジュールをコンパイルし、強化子 2 回で終わるセッションとして動かし、イベント記録を読む:
+## 例
+
+[contingency-dsl](https://github.com/OperantKit/contingency-dsl) の式を組み立て、強化子 2 回で終わるセッションとして動かし、イベントの記録を読みます。
 
 ```python
 from contingency_dsl import parse
@@ -70,7 +35,7 @@ session.start(0.0)
 responses = 0
 for t in range(1, 11):  # 1 秒に 1 反応
     if session.state is SessionState.REINFORCING:
-        session.end_reinforcement(float(t))  # 1 秒間の強化子提示を終える
+        session.end_reinforcement(float(t))  # 1 秒間の強化子への接近が終わる
         continue
     responses += 1
     session.update(float(t), responses)
@@ -81,55 +46,49 @@ print([(type(e).__name__, e.timestamp) for e in session.events if not isinstance
 #  ('ReinforcerStartEvent', 7.0), ('ReinforcerEndEvent', 8.0)]
 ```
 
-`contingency-py` が依存として入り、`contingency-dsl-py` もそれに伴って入る。同じイベントをファイルやダッシュボードに送るには、[session-runner](https://github.com/OperantKit/session-runner)（`pip install session-runner`）でセッションを駆動する。
+同じイベントを、起きたそばからファイルや実時間の表示器に送るには、[session-runner](https://github.com/OperantKit/session-runner) でセッションを動かします。
 
-## 自作の 50 行のセッションループでは足りない理由
+## 含まれるもの
 
-スケジュールに「強化か否か」だけを問うループは、セッションのデータが依存する次の点を落とす:
+| モジュール | 役目 | 公開する名前 |
+|---|---|---|
+| `session` | セッション本体。状態 IDLE → RUNNING → REINFORCING → FINISHED、イベントの記録、並立スケジュールでのオペランダムごとの反応数（`handle_response_on(index, timestamp)`）、強化率、強化率を感度の指数で累乗した行動モメンタム（Nevin, 1992） | `Session` |
+| `delay` | 遅延した強化子の効力 `exp(-k * delay)`。遅延に信号があるときは `k` を小さくします。各 `ReinforcerStartEvent` に記録されます | `DelayFunction` |
+| `exit_condition` | セッションをいつ終えるか | `ExitCondition`、`ReinforcementCountExit`、`TimeLimitExit` |
+| `events` | セッションの状態とイベント | `SessionState`、`ResponseEvent`、`ReinforcerStartEvent`、`ReinforcerEndEvent`、`StateChangeEvent`、`SessionEvent` |
+| `sink` | `emit(event)` を持つものなら何でもイベントを受け取れます。`event_to_dict` は JSON にできる dict を返します | `EventSink`、`InMemorySink`、`event_to_dict` |
+| `context` | 実験文脈。背景刺激を名前つきの特徴の強さで表し、コサイン類似度で比べます | `ExperimentContext` |
+| `renewal` | ABA・AAB・ABC のリニューアルの実験計画（Bouton & Bolles, 1979; Bouton, 2004） | `RenewalParadigm`、`ContextualSession`、`RenewalExperiment`、`PhaseRecord`、`PhaseResult`、`renewal_index` |
+| `clock` | シミュレーション用の仮想の時計と、実時間の時計 | `Clock`、`VirtualClock`、`RealtimeClock` |
+| `observation` | スケジュールの判定に渡すセッションの状態のスナップショット（反応数、直前の強化子からの時間） | `Observation` |
+| `protocols` | スケジュールのインタフェース。`contingency.Schedule` の別名です | `Schedule` |
 
-- **強化子の提示は区間である.** `Session` は `ReinforcerStartEvent` とともに `REINFORCING` に入り、`end_reinforcement` が呼ばれると `ReinforcerEndEvent` とともに出る。その間スケジュールは進めない。
-- **終了条件.** `ReinforcementCountExit` と `TimeLimitExit` を更新のたびに検査し、`FINISHED` への `StateChangeEvent` でセッションを終える。
-- **強化遅延.** 各 `ReinforcerStartEvent` は、きっかけとなった反応から提示までの遅延に基づく `potency` を記録する（`DelayFunction`、`exp(-k * delay)`。遅延中に信号があると `k` が小さくなる）。
-- **並立スケジュールのオペランダム.** `handle_response_on(index, timestamp)` は反応を `Conc(...)` の 1 成分に渡し、オペランダムごとの反応数を保持する。
-- **文脈と復活.** `ExperimentContext` は文脈をコサイン類似度で比較する。`RenewalExperiment` と `renewal_index` は ABA・AAB・ABC の復活の実験計画を扱う。
-- **イベントはデータ.** すべてのイベントは dataclass で、`event_to_dict` で JSON にできる辞書になり、`emit(event)` を持つ任意のオブジェクトが受け取れる。
+experiment-core はスケジュールを実装しません（contingency-py が持ちます）。ログファイルも書きません（session-recorder）。ハードウェアともやりとりしません（[experiment-io](https://github.com/OperantKit/experiment-io)）。
+
+## 制限
+
+- まだ PyPI に登録されておらず、API は変わることがあります。
+- `renewal_index` と `RenewalExperiment.predict_renewal` は、文脈の特徴ベクトルの類似度だけから `sim(test, acquisition) - sim(test, extinction)` として計算します。実験計画のモデルであって、反応のデータから計算する指標ではありません。
+- ファイルに書いた実験プロトコルを読み込む機能はありません。セッションは Python で組み立てます。
+- スケジュールに渡す時刻は減ってはいけません。1 つの `Session` は 1 個体の 1 セッションに使います。
 
 ## 開発
 
 ```bash
+git clone https://github.com/OperantKit/experiment-core && cd experiment-core
+python -m venv .venv
+G=git+https://github.com/OperantKit
+.venv/bin/python -m pip install --no-deps $G/contingency-dsl-py $G/contingency-py -e .
+.venv/bin/python -m pip install pytest pytest-cov
 .venv/bin/pytest
-.venv/bin/pytest --cov=src --cov-report=term-missing
-.venv/bin/ruff check src tests
-.venv/bin/black src tests
 ```
-
-## スコープ
-
-本パッケージが所有するもの:
-
-| モジュール | エクスポート |
-|---|---|
-| `session` | `Session` |
-| `context` | `ExperimentContext` |
-| `renewal` | `RenewalParadigm`, `ContextualSession`, `RenewalExperiment`, `PhaseRecord`, `PhaseResult`, `renewal_index` |
-| `events` | `SessionState`, `ResponseEvent`, `ReinforcerStartEvent`, `ReinforcerEndEvent`, `StateChangeEvent`, `SessionEvent` |
-| `exit_condition` | `ExitCondition`, `ReinforcementCountExit`, `TimeLimitExit` |
-| `observation` | `Observation` |
-| `delay` | `DelayFunction` |
-| `protocols` | `Schedule`（`contingency.Schedule` の別名） |
-| `clock` | `Clock`, `VirtualClock`, `RealtimeClock` |
-| `sink` | `EventSink`, `InMemorySink`, `event_to_dict` |
-
-明示的な非目標（他のパッケージか次の設計ラウンドに属するもの）:
-
-- 実験プロトコル・ローダ (YAML/JSON → ランタイム・グラフ) と `ExperimentCore` ファサード — 上位のオーケストレータ・パッケージへ延期。v0 の `ExperimentCore` / `ExecutionEnvironmentAdapter` / `DataManager` 抽象化は **移植されていない**; これらは simulator 指向の v0 ワークフロー用のスキャフォールドで、ここで採用された Protocol 境界モデルに合わない。
-- 永続化 / JSONL ロギング — `session-recorder` が `SessionEvent` を :class:`EventSink` 経由で消費する。
-- 具象強化スケジュール — `contingency-py`（`contingency.ScheduleBuilder`）。
-- 刺激 / 強化子メタデータ — `contingency-dsl-py`。
-- ハードウェア I/O — `experiment-io`。
 
 ## 参考文献
 
-- Bouton, M. E., & Bolles, R. C. (1979). Contextual control of the extinction of conditioned fear. *Learning and Motivation*, 10(4), 445–466. https://doi.org/10.1016/0023-9690(79)90057-2
 - Bouton, M. E. (2004). Context and behavioral processes in extinction. *Learning & Memory*, 11(5), 485–494. https://doi.org/10.1101/lm.78804
+- Bouton, M. E., & Bolles, R. C. (1979). Contextual control of the extinction of conditioned fear. *Learning and Motivation*, 10(4), 445–466. https://doi.org/10.1016/0023-9690(79)90057-2
 - Nevin, J. A. (1992). An integrative model for the study of behavioral momentum. *Journal of the Experimental Analysis of Behavior*, 57(3), 301–316. https://doi.org/10.1901/jeab.1992.57-301
+
+## ライセンス
+
+MIT です。[LICENSE](LICENSE) を参照してください。

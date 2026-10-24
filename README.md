@@ -2,63 +2,28 @@
 
 :jp: [日本語版 README](README.ja.md)
 
-Experimental orchestration core for operantkit.
+experiment-core puts a session around a reinforcement schedule: it starts the session, steps the schedule with each response, holds the session while a reinforcer is being delivered, ends the session when an exit condition is met, and records everything as typed events. It also models experimental contexts and ABA, AAB, and ABC renewal designs. Within [OperantKit](https://github.com/OperantKit) it sits between the schedule engine [contingency-py](https://github.com/OperantKit/contingency-py) and the session drivers and recorders ([session-runner](https://github.com/OperantKit/session-runner), [session-recorder](https://github.com/OperantKit/session-recorder)).
 
-## Role
+- **Reinforcer delivery takes time.** The session enters a reinforcing state with a start event and leaves it with an end event; responses during delivery do not advance the schedule.
+- **Exit conditions** (a number of reinforcers, or a time limit) are checked on every update.
+- **Every event is plain data** that can be written to a file, sent to a viewer, or checked in a test.
 
-Session lifecycle management, experimental context (Bouton's background stimuli), and renewal paradigms (ABA/AAB/ABC). This package is the runtime orchestrator that turns a declarative `contingency-dsl` program into a live session: it decides when to deliver reinforcers, tracks response events, and manages context-dependent phase transitions.
-
-## Responsibilities
-
-- **Session**: Lifecycle (IDLE → RUNNING → REINFORCING → FINISHED), event log, exit conditions, concurrent (multi-operandum) support, delay-of-reinforcement potency calculation.
-- **ExperimentContext**: Bouton-style contextual stimuli that gate or modulate contingencies (background cues, situational sets).
-- **Renewal**: ABA/AAB/ABC context-dependent recovery paradigms (Bouton & Bolles, 1979; Bouton, 2004).
-- **Virtual clock hook**: Deterministic time source abstraction so simulations need not wait in real time.
-
-## Not responsibilities
-
-- Schedule algorithms themselves (live in `contingency` / `contingency-py`).
-- Stimulus metadata (lives in `contingency-dsl-py`).
-- Event persistence / JSONL logging (lives in `session-recorder`).
-- UI, hardware bridging (live in `experiment-io`, `operantkit-frontend`).
-
-## Architecture
-
-```
-                         ┌──────────────────────────┐
-                         │     experiment-core      │
-                         │  ┌────────────────────┐  │
-                         │  │ Session            │  │
-                         │  │ ExperimentContext  │  │
-                         │  │ Renewal            │  │
-                         │  └─────────┬──────────┘  │
-                         └────────────┼─────────────┘
-                    depends on (via Protocol)
-                                      │
-                ┌─────────────────────┼──────────────────────┐
-                ▼                     ▼                      ▼
-    Schedule runtime      contingency-dsl-py AST    stimulus metadata
-    (contingency, ext.)   (program → runtime)       (contingency-dsl-py)
-```
-
-`experiment_core.Schedule` is an alias of `contingency.Schedule`; this package does not declare its own schedule interface. `Session` drives schedules through `step(now, event)` and `reset()`. Concurrent schedules are `contingency.Concurrent` instances whose `components` keys name the operanda; `Session.handle_response_on(index, timestamp)` maps an integer operandum index to the matching component key.
+Notes for AI coding agents are in [AGENTS.md](AGENTS.md).
 
 ## Installation
 
-```bash
-pip install experiment-core
-```
-
-For development:
+Python 3.11 or newer. experiment-core is not on PyPI yet. Install it and the two packages it needs from GitHub without dependency resolution:
 
 ```bash
-mise exec -- python -m venv .venv
-mise exec -- .venv/bin/python -m pip install -e '.[dev]'
+G=git+https://github.com/OperantKit
+pip install --no-deps $G/contingency-dsl-py $G/contingency-py $G/experiment-core
 ```
 
-## 30-second example
+`pip check` reports version mismatches between these development builds; they do not affect the example below.
 
-Compile a schedule from [contingency-dsl](https://github.com/OperantKit/contingency-dsl), run it as a session that ends after two reinforcers, and read the event log:
+## Example
+
+Compile a [contingency-dsl](https://github.com/OperantKit/contingency-dsl) expression, run it as a session that ends after two reinforcers, and read the event log:
 
 ```python
 from contingency_dsl import parse
@@ -81,55 +46,49 @@ print([(type(e).__name__, e.timestamp) for e in session.events if not isinstance
 #  ('ReinforcerStartEvent', 7.0), ('ReinforcerEndEvent', 8.0)]
 ```
 
-`contingency-py` is installed as a dependency and brings `contingency-dsl-py` with it. To forward the same events to a file or a dashboard, drive the session with [session-runner](https://github.com/OperantKit/session-runner) (`pip install session-runner`).
+To send the same events to a file or a live viewer as they happen, drive the session with [session-runner](https://github.com/OperantKit/session-runner).
 
-## Why not a 50-line hand-written session loop?
+## What is included
 
-A loop that only asks the schedule "reinforced or not?" leaves out what the session data depend on:
+| Module | What it does | Exports |
+|---|---|---|
+| `session` | The session: states IDLE → RUNNING → REINFORCING → FINISHED, the event log, per-operandum counts under concurrent schedules (`handle_response_on(index, timestamp)`), reinforcement rate, and behavioral momentum as reinforcement rate raised to a sensitivity exponent (Nevin, 1992) | `Session` |
+| `delay` | The potency of a delayed reinforcer, `exp(-k * delay)`, with a smaller `k` when the delay is signaled; recorded on each `ReinforcerStartEvent` | `DelayFunction` |
+| `exit_condition` | When the session ends | `ExitCondition`, `ReinforcementCountExit`, `TimeLimitExit` |
+| `events` | Session states and events | `SessionState`, `ResponseEvent`, `ReinforcerStartEvent`, `ReinforcerEndEvent`, `StateChangeEvent`, `SessionEvent` |
+| `sink` | Anything with `emit(event)` receives events; `event_to_dict` gives a JSON-ready dict | `EventSink`, `InMemorySink`, `event_to_dict` |
+| `context` | An experimental context: the background stimuli as named feature intensities, compared by cosine similarity | `ExperimentContext` |
+| `renewal` | ABA, AAB, and ABC renewal designs (Bouton & Bolles, 1979; Bouton, 2004) | `RenewalParadigm`, `ContextualSession`, `RenewalExperiment`, `PhaseRecord`, `PhaseResult`, `renewal_index` |
+| `clock` | A virtual clock for simulations and a real-time clock | `Clock`, `VirtualClock`, `RealtimeClock` |
+| `observation` | A snapshot of the session state (response counts, times since the last reinforcer) passed to schedule predicates | `Observation` |
+| `protocols` | The schedule interface, an alias of `contingency.Schedule` | `Schedule` |
 
-- **Reinforcer delivery is an interval.** `Session` enters `REINFORCING` with a `ReinforcerStartEvent` and leaves it with a `ReinforcerEndEvent` when `end_reinforcement` is called; the schedule is not stepped in between.
-- **Exit conditions.** `ReinforcementCountExit` and `TimeLimitExit` are checked on every update and end the session with a `StateChangeEvent` to `FINISHED`.
-- **Delay of reinforcement.** Each `ReinforcerStartEvent` records a `potency` from the delay between the triggering response and delivery (`DelayFunction`, `exp(-k * delay)`, with a smaller `k` when the delay is signaled).
-- **Concurrent operanda.** `handle_response_on(index, timestamp)` routes a response to one component of a `Conc(...)` schedule and keeps per-operandum counts.
-- **Context and renewal.** `ExperimentContext` compares contexts by cosine similarity; `RenewalExperiment` and `renewal_index` cover ABA, AAB, and ABC renewal designs.
-- **Events are data.** Every event is a dataclass; `event_to_dict` gives a JSON-ready dict and any object with `emit(event)` can receive them.
+experiment-core does not implement schedules (they come from contingency-py), write log files (session-recorder), or talk to hardware ([experiment-io](https://github.com/OperantKit/experiment-io)).
+
+## Limitations
+
+- Not on PyPI yet, and the API can still change.
+- `renewal_index` and `RenewalExperiment.predict_renewal` are computed from the similarity of the context feature vectors alone: `sim(test, acquisition) - sim(test, extinction)`. They are a model of the design, not a measure computed from response data.
+- There is no loader for an experiment protocol written as a file; the session is built in Python.
+- The schedule must receive non-decreasing timestamps, and one `Session` serves one subject in one session.
 
 ## Development
 
 ```bash
+git clone https://github.com/OperantKit/experiment-core && cd experiment-core
+python -m venv .venv
+G=git+https://github.com/OperantKit
+.venv/bin/python -m pip install --no-deps $G/contingency-dsl-py $G/contingency-py -e .
+.venv/bin/python -m pip install pytest pytest-cov
 .venv/bin/pytest
-.venv/bin/pytest --cov=src --cov-report=term-missing
-.venv/bin/ruff check src tests
-.venv/bin/black src tests
 ```
-
-## Scope
-
-This package owns:
-
-| Module | Exports |
-|---|---|
-| `session` | `Session` |
-| `context` | `ExperimentContext` |
-| `renewal` | `RenewalParadigm`, `ContextualSession`, `RenewalExperiment`, `PhaseRecord`, `PhaseResult`, `renewal_index` |
-| `events` | `SessionState`, `ResponseEvent`, `ReinforcerStartEvent`, `ReinforcerEndEvent`, `StateChangeEvent`, `SessionEvent` |
-| `exit_condition` | `ExitCondition`, `ReinforcementCountExit`, `TimeLimitExit` |
-| `observation` | `Observation` |
-| `delay` | `DelayFunction` |
-| `protocols` | `Schedule` (alias of `contingency.Schedule`) |
-| `clock` | `Clock`, `VirtualClock`, `RealtimeClock` |
-| `sink` | `EventSink`, `InMemorySink`, `event_to_dict` |
-
-Explicit non-goals (belong to other packages or the next design round):
-
-- Experiment protocol loader (YAML/JSON → runtime graph) and `ExperimentCore` façade — deferred to a higher-level orchestrator package. The v0 `ExperimentCore` / `ExecutionEnvironmentAdapter` / `DataManager` abstractions are **not ported**; they were scaffolding for a simulator-oriented v0 workflow and do not fit the Protocol-boundary model adopted here.
-- Persistence / JSONL logging — `session-recorder` consumes `SessionEvent` via :class:`EventSink`.
-- Concrete reinforcement schedules — `contingency-py` (`contingency.ScheduleBuilder`).
-- Stimulus / reinforcer metadata — `contingency-dsl-py`.
-- Hardware I/O — `experiment-io`.
 
 ## References
 
-- Bouton, M. E., & Bolles, R. C. (1979). Contextual control of the extinction of conditioned fear. *Learning and Motivation*, 10(4), 445–466. https://doi.org/10.1016/0023-9690(79)90057-2
 - Bouton, M. E. (2004). Context and behavioral processes in extinction. *Learning & Memory*, 11(5), 485–494. https://doi.org/10.1101/lm.78804
+- Bouton, M. E., & Bolles, R. C. (1979). Contextual control of the extinction of conditioned fear. *Learning and Motivation*, 10(4), 445–466. https://doi.org/10.1016/0023-9690(79)90057-2
 - Nevin, J. A. (1992). An integrative model for the study of behavioral momentum. *Journal of the Experimental Analysis of Behavior*, 57(3), 301–316. https://doi.org/10.1901/jeab.1992.57-301
+
+## License
+
+MIT. See [LICENSE](LICENSE).
